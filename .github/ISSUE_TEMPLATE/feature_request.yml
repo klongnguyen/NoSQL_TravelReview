@@ -1,0 +1,41 @@
+name: "Feature Request"
+description: "Đề xuất một tính năng mới theo Product Backlog"
+title: "[US-XX] <Tên User Story hoặc Tính năng>"
+labels: ["type:feature", "priority:P0"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ### Hướng dẫn tạo User Story Issue
+        Mỗi User Story cần tuân theo SRS Baseline 1.0 (Quy ước: `[US-XX] Tiêu đề`).
+  - type: input
+    id: user_story_id
+    attributes:
+      label: "User Story ID / Traceability"
+      description: "Ví dụ: US-01, US-06, FR-PLC-02"
+      placeholder: "US-XX"
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: "Mô tả User Story (As a... I want to... So that...)"
+      placeholder: "Là [Role], tôi muốn [hành động] để [mục đích]..."
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance_criteria
+    attributes:
+      label: "Acceptance Criteria (Tiêu chí nghiệm thu)"
+      value: |
+        - [ ] Tiêu chí 1: ...
+        - [ ] Tiêu chí 2: ...
+        - [ ] Unit Test / Integration Test đạt yêu cầu
+        - [ ] Không làm phá vỡ các chức năng cũ
+    validations:
+      required: true
+  - type: textarea
+    id: technical_notes
+    attributes:
+      label: "Ghi chú kỹ thuật / Database schema liên quan"
+      placeholder: "MongoDB Collection: places, embedded review, index..."

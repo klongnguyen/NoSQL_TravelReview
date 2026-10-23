@@ -1,0 +1,41 @@
+name: "Báo lỗi (Bug Report)"
+description: "Báo cáo lỗi phát sinh trong quá trình chạy thử hoặc kiểm thử"
+title: "[BUG] <Mô tả ngắn gọn lỗi>"
+labels: ["type:bug", "priority:P0"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ### Báo cáo lỗi kỹ thuật
+        Vui lòng cung cấp chi tiết các bước tái hiện và bằng chứng (logs, screenshot, Postman response).
+  - type: textarea
+    id: bug_description
+    attributes:
+      label: "Mô tả lỗi"
+      placeholder: "Mô tả rõ hành vi không mong muốn xảy ra..."
+    validations:
+      required: true
+  - type: textarea
+    id: steps_to_reproduce
+    attributes:
+      label: "Các bước tái hiện (Steps to Reproduce)"
+      placeholder: |
+        1. Gọi API POST /api/places/...
+        2. Nhập payload ...
+        3. Nhận mã lỗi 500 thay vì 400
+    validations:
+      required: true
+  - type: textarea
+    id: expected_vs_actual
+    attributes:
+      label: "Kỳ vọng vs Thực tế"
+      placeholder: |
+        - Kỳ vọng: ...
+        - Thực tế: ...
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: "Bằng chứng (Evidence - Screenshot/Logs/Compass)"
+      placeholder: "Dán link ảnh, log server hoặc Postman request/response..."
