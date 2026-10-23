@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 ## Liên kết User Story / Issue
 Closes #
 
@@ -21,3 +22,40 @@ Closes #
 
 ## Bằng chứng kiểm thử (Test Evidence)
 *(Dán screenshot Postman, Compass, hoặc kết quả chạy kiểm thử tại đây)*
+=======
+## Related Issue
+
+Closes #
+
+## Mô tả thay đổi
+
+- 
+- 
+- 
+
+## Loại thay đổi
+
+- [ ] Feature
+- [ ] Bug fix
+- [ ] Refactor
+- [ ] Documentation
+- [ ] Test
+
+## Testing
+
+- [ ] Local test passed
+- [ ] API test passed (nếu có)
+- [ ] Database test passed (nếu có)
+- [ ] Không phát hiện regression
+
+## Evidence
+
+Screenshot / Postman / MongoDB Compass / Redis Insight / Neo4j Browser / Benchmark:
+
+## Reviewer checklist
+
+- [ ] Đã đọc Issue liên quan
+- [ ] Code/tài liệu đúng Acceptance Criteria
+- [ ] Không có thay đổi ngoài phạm vi không cần thiết
+- [ ] Có thể merge vào `main`
+>>>>>>> 5e758ed55ddf3cfc9cfeac49d8301ca46eb00932
