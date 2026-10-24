@@ -1,10 +1,10 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useMemo } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { MapPin, Navigation, Compass, Star, Plus, Eye, Layers, CheckCircle2, Loader2 } from 'lucide-react';
+import { MapPin, Navigation, Compass, Star, Eye, Layers, CheckCircle2, Loader2, Search, Filter } from 'lucide-react';
 import { placeService } from '../services/api';
 
-// Các nguồn cung cấp Tile bản đồ tương thích 100% tại Việt Nam, không cần API Key
+// Các nguồn cung cấp Tile bản đồ tương thích 100% tại Việt Nam
 const TILE_PROVIDERS = {
   googleRoadmap: {
     id: 'googleRoadmap',
@@ -37,36 +37,33 @@ const TILE_PROVIDERS = {
   }
 };
 
-export default function MapView({ onSelectPlace, onAddToTrip }) {
+export default function MapView({ places = [], onSelectPlace, onAddToTrip }) {
   const mapContainerRef = useRef(null);
   const mapInstanceRef = useRef(null);
   const markersLayerRef = useRef(null);
   const activeTileLayerRef = useRef(null);
   const userMarkerRef = useRef(null);
   const radiusCircleRef = useRef(null);
-  const accuracyCircleRef = useRef(null);
 
-  // Vị trí người dùng (ban đầu sẽ được hệ thống TỰ ĐỘNG nhận diện qua GPS/mạng)
-  const [userLocation, setUserLocation] = useState(null);
-  const [locationAccuracy, setLocationAccuracy] = useState(null);
-  const [locationStatus, setLocationStatus] = useState('Đang tự động nhận diện vị trí...');
+  // Vị trí người dùng
+  const [userLocation, setUserLocation] = useState({ lat: 10.7769, lng: 106.7009 });
+  const [locationStatus, setLocationStatus] = useState('Đang tự động nhận diện vị trí GPS...');
   const [isLocating, setIsLocating] = useState(false);
-  const [searchRadius, setSearchRadius] = useState(3000); // 3km
-  const [nearbyPlaces, setNearbyPlaces] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [selectedCategoryFilter, setSelectedCategoryFilter] = useState('');
+  const [viewScope, setViewScope] = useState('all'); // 'all' (Tất cả 40+ địa điểm) hoặc 'nearby' (Gần tôi)
+  const [searchRadius, setSearchRadius] = useState(5000); // 5km
+  const [selectedCategory, setSelectedCategory] = useState('all');
+  const [searchKeyword, setSearchKeyword] = useState('');
   const [activeTileStyle, setActiveTileStyle] = useState('googleRoadmap');
+  const [selectedPlaceInfo, setSelectedPlaceInfo] = useState(null);
 
-  // 1. Khởi tạo Leaflet Map và TỰ ĐỘNG NHẬN DIỆN VỊ TRÍ
+  // 1. Khởi tạo Leaflet Map
   useEffect(() => {
     if (!mapContainerRef.current) return;
 
-    let map = mapInstanceRef.current;
-    if (!map) {
-      // Khởi tạo map tại trung tâm TP.HCM
-      map = L.map(mapContainerRef.current, {
+    if (!mapInstanceRef.current) {
+      const map = L.map(mapContainerRef.current, {
         center: [10.7769, 106.7009],
-        zoom: 14,
+        zoom: 12,
         zoomControl: false
       });
 
@@ -82,12 +79,11 @@ export default function MapView({ onSelectPlace, onAddToTrip }) {
       mapInstanceRef.current = map;
 
       // Invalidate size để tile render mượt mà
-      setTimeout(() => { if (mapInstanceRef.current) mapInstanceRef.current.invalidateSize(); }, 100);
-      setTimeout(() => { if (mapInstanceRef.current) mapInstanceRef.current.invalidateSize(); }, 350);
-      setTimeout(() => { if (mapInstanceRef.current) mapInstanceRef.current.invalidateSize(); }, 700);
+      setTimeout(() => { if (mapInstanceRef.current) mapInstanceRef.current.invalidateSize(); }, 150);
+      setTimeout(() => { if (mapInstanceRef.current) mapInstanceRef.current.invalidateSize(); }, 500);
 
-      // TỰ ĐỘNG định vị vị trí chính xác của người dùng ngay khi mở bản đồ
-      autoDetectExactLocation(map);
+      // Tự động nhận diện GPS
+      autoDetectLocation(map);
     }
 
     const handleResize = () => {
@@ -106,121 +102,43 @@ export default function MapView({ onSelectPlace, onAddToTrip }) {
     };
   }, []);
 
-  // 2. Hàm TỰ ĐỘNG nhận diện vị trí chính xác (HTML5 GPS + Network Fallback)
-  const autoDetectExactLocation = (targetMap) => {
+  // 2. Nhận diện vị trí người dùng
+  const autoDetectLocation = (targetMap) => {
     const map = targetMap || mapInstanceRef.current;
     setIsLocating(true);
-    setLocationStatus('Đang xác định tọa độ GPS chính xác...');
+    setLocationStatus('Đang xác định tọa độ GPS...');
 
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (pos) => {
-          const { latitude, longitude, accuracy } = pos.coords;
+          const { latitude, longitude } = pos.coords;
           const loc = { lat: latitude, lng: longitude };
           setUserLocation(loc);
-          setLocationAccuracy(accuracy ? Math.round(accuracy) : null);
-          setLocationStatus(accuracy ? `Đã nhận diện vị trí (sai số ±${Math.round(accuracy)}m)` : 'Đã nhận diện vị trí GPS');
+          setLocationStatus('Đã nhận diện tọa độ GPS của bạn');
           setIsLocating(false);
-
-          if (map) {
-            map.flyTo([latitude, longitude], 15, { animate: true, duration: 1.2 });
-          }
-          loadNearbyPlaces(longitude, latitude, searchRadius);
+          renderUserPin(map, loc);
         },
-        async (err) => {
-          console.warn('HTML5 Geolocation thông báo:', err.message);
-          // Fallback sang Network Geolocation theo IP thực tế của thiết bị
-          setLocationStatus('Đang đồng bộ vị trí qua mạng IP...');
-          try {
-            const res = await fetch('https://ipwho.is/');
-            const data = await res.json();
-            if (data && data.success && data.latitude && data.longitude) {
-              const loc = { lat: data.latitude, lng: data.longitude };
-              setUserLocation(loc);
-              setLocationAccuracy(null);
-              setLocationStatus(`Đã nhận diện: ${data.city || 'TP.HCM'}`);
-              if (map) {
-                map.flyTo([data.latitude, data.longitude], 14, { animate: true, duration: 1.2 });
-              }
-              loadNearbyPlaces(data.longitude, data.latitude, searchRadius);
-            } else {
-              fallbackDefaultLocation(map);
-            }
-          } catch {
-            fallbackDefaultLocation(map);
-          } finally {
-            setIsLocating(false);
-          }
+        () => {
+          // Fallback mặc định Quận 1
+          const defaultLoc = { lat: 10.7769, lng: 106.7009 };
+          setUserLocation(defaultLoc);
+          setLocationStatus('Vị trí trung tâm: Quận 1, TP.HCM');
+          setIsLocating(false);
+          renderUserPin(map, defaultLoc);
         },
-        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+        { enableHighAccuracy: true, timeout: 8000 }
       );
     } else {
-      fallbackDefaultLocation(map);
+      const defaultLoc = { lat: 10.7769, lng: 106.7009 };
+      setUserLocation(defaultLoc);
+      setLocationStatus('Vị trí trung tâm: Quận 1, TP.HCM');
       setIsLocating(false);
+      renderUserPin(map, defaultLoc);
     }
   };
 
-  const fallbackDefaultLocation = (map) => {
-    const defaultLoc = { lat: 10.7725, lng: 106.6983 };
-    setUserLocation(defaultLoc);
-    setLocationStatus('Vị trí trung tâm TP.HCM (Quận 1)');
-    if (map) {
-      map.flyTo([defaultLoc.lat, defaultLoc.lng], 15, { animate: true, duration: 1.2 });
-    }
-    loadNearbyPlaces(defaultLoc.lng, defaultLoc.lat, searchRadius);
-  };
-
-  // 3. Tải địa điểm gần tọa độ người dùng bằng MongoDB 2dsphere index ($nearSphere)
-  const loadNearbyPlaces = async (lng, lat, radius) => {
-    setLoading(true);
-    try {
-      const res = await placeService.getNearbyPlaces(lng, lat, radius);
-      const data = res.data || [];
-      setNearbyPlaces(data);
-      renderMarkers(data, lng, lat, radius);
-    } catch (err) {
-      console.error('Lỗi tải địa điểm lân cận:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // 4. Render Markers & Ghim Xanh Vị Trí Của Tôi
-  const renderMarkers = (places, userLng, userLat, radius) => {
-    const map = mapInstanceRef.current;
-    const markersLayer = markersLayerRef.current;
-    if (!map || !markersLayer) return;
-
-    markersLayer.clearLayers();
-
-    // Vòng tròn bán kính tìm kiếm quanh người dùng
-    if (radiusCircleRef.current) {
-      map.removeLayer(radiusCircleRef.current);
-    }
-    radiusCircleRef.current = L.circle([userLat, userLng], {
-      radius: radius,
-      color: '#0284c7',
-      fillColor: '#0284c7',
-      fillOpacity: 0.08,
-      weight: 1.5,
-      dashArray: '4, 4'
-    }).addTo(map);
-
-    // Vòng tròn hiển thị độ chính xác GPS nếu có
-    if (accuracyCircleRef.current) {
-      map.removeLayer(accuracyCircleRef.current);
-    }
-    if (locationAccuracy && locationAccuracy < radius) {
-      accuracyCircleRef.current = L.circle([userLat, userLng], {
-        radius: locationAccuracy,
-        color: '#10b981',
-        fillColor: '#10b981',
-        fillOpacity: 0.15,
-        weight: 1
-      }).addTo(map);
-    }
-
-    // Ghim vị trí người dùng (Radar Pulsing Pin chuẩn, CỐ ĐỊNH chính xác tại vị trí GPS)
+  const renderUserPin = (map, loc) => {
+    if (!map) return;
     const userIcon = L.divIcon({
       className: 'user-location-pin',
       html: `
@@ -236,113 +154,207 @@ export default function MapView({ onSelectPlace, onAddToTrip }) {
     if (userMarkerRef.current) {
       map.removeLayer(userMarkerRef.current);
     }
-    const userMarker = L.marker([userLat, userLng], {
+    const userMarker = L.marker([loc.lat, loc.lng], {
       icon: userIcon,
-      draggable: false // Ghim cố định tại vị trí GPS, không cho kéo thả sai lệch
+      draggable: false
     });
 
     userMarker.bindPopup(`
-      <div style="padding:6px; font-family:Inter,sans-serif; font-size:12px; min-width:180px;">
+      <div style="padding:6px; font-family:var(--aj-font-family); font-size:12px; min-width:180px;">
         <strong style="color:#0284c7; font-size:13px;">📍 Vị trí hiện tại của bạn</strong><br/>
-        <span style="color:#475569;">Tọa độ: ${userLat.toFixed(5)}, ${userLng.toFixed(5)}</span><br/>
-        <span style="display:inline-block; margin-top:4px; font-size:11px; color:#059669; font-weight:600;">
-          ✓ Tự động xác định qua GPS / Vệ tinh
-        </span>
+        <span style="color:#475569;">Tọa độ: ${loc.lat.toFixed(4)}, ${loc.lng.toFixed(4)}</span>
       </div>
     `);
 
     userMarker.addTo(map);
     userMarkerRef.current = userMarker;
+  };
 
-    // Filter theo category nếu có
-    const filtered = selectedCategoryFilter 
-      ? places.filter(p => p.categoryId === selectedCategoryFilter)
-      : places;
+  // Tính khoảng cách Haversine giữa 2 tọa độ (mét)
+  const calculateDistance = (lat1, lon1, lat2, lon2) => {
+    const R = 6371e3;
+    const φ1 = (lat1 * Math.PI) / 180;
+    const φ2 = (lat2 * Math.PI) / 180;
+    const Δφ = ((lat2 - lat1) * Math.PI) / 180;
+    const Δλ = ((lon2 - lon1) * Math.PI) / 180;
+    const a =
+      Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+      Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+  };
 
-    // Render từng địa điểm du lịch / quán ăn
-    filtered.forEach(place => {
+  // 3. Lọc danh sách địa điểm theo Scope, Category và Keyword
+  const displayedPlaces = useMemo(() => {
+    return places.filter(place => {
+      // Keyword
+      if (searchKeyword.trim()) {
+        const kw = searchKeyword.toLowerCase();
+        const matchName = place.name?.toLowerCase().includes(kw);
+        const matchAddr = place.address?.district?.toLowerCase().includes(kw) || place.address?.city?.toLowerCase().includes(kw);
+        if (!matchName && !matchAddr) return false;
+      }
+
+      // Category
+      if (selectedCategory !== 'all') {
+        const catName = place.categoryName || '';
+        const catSlug = place.catSlug || '';
+        if (catName !== selectedCategory && catSlug !== selectedCategory) return false;
+      }
+
+      // Scope: Nearby
+      if (viewScope === 'nearby' && userLocation) {
+        const coords = place.location?.coordinates;
+        if (!coords || coords.length < 2) return false;
+        const [pLng, pLat] = coords;
+        const dist = calculateDistance(userLocation.lat, userLocation.lng, pLat, pLng);
+        if (dist > searchRadius) return false;
+      }
+
+      return true;
+    });
+  }, [places, searchKeyword, selectedCategory, viewScope, userLocation, searchRadius]);
+
+  // 4. Render Markers trên bản đồ mỗi khi displayedPlaces thay đổi
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    const markersLayer = markersLayerRef.current;
+    if (!map || !markersLayer) return;
+
+    markersLayer.clearLayers();
+
+    // Vòng tròn bán kính nếu ở chế độ Nearby
+    if (radiusCircleRef.current) {
+      map.removeLayer(radiusCircleRef.current);
+      radiusCircleRef.current = null;
+    }
+
+    if (viewScope === 'nearby' && userLocation) {
+      radiusCircleRef.current = L.circle([userLocation.lat, userLocation.lng], {
+        radius: searchRadius,
+        color: '#0284c7',
+        fillColor: '#0284c7',
+        fillOpacity: 0.08,
+        weight: 1.5,
+        dashArray: '4, 4'
+      }).addTo(map);
+    }
+
+    const bounds = L.latLngBounds([]);
+
+    displayedPlaces.forEach(place => {
       const coords = place.location?.coordinates;
       if (!coords || coords.length < 2) return;
 
       const [pLng, pLat] = coords;
-      const isHighRating = (place.ratingAverage || 0) >= 4.7;
+      bounds.extend([pLat, pLng]);
 
+      const rating = place.ratingAverage || place.googleRating || 4.5;
+      const isTop = rating >= 4.8;
+
+      // Pin thiết kế theo hệ thống LonGo / Al Jazeera
       const placeIcon = L.divIcon({
-        className: 'place-custom-pin',
+        className: 'longo-map-pin',
         html: `
           <div style="
-            background:${isHighRating ? '#0f172a' : '#ffffff'};
-            color:${isHighRating ? '#ffffff' : '#0f172a'};
-            border:1px solid ${isHighRating ? '#0f172a' : '#cbd5e1'};
-            border-radius:14px;
-            padding:3px 8px;
-            font-size:11px;
-            font-weight:600;
-            white-space:nowrap;
-            display:flex;
-            align-items:center;
-            gap:4px;
-            box-shadow:0 2px 6px rgba(0,0,0,0.12);
-            cursor:pointer;
+            background: ${isTop ? '#000000' : '#ffffff'};
+            color: ${isTop ? '#ffffff' : '#000000'};
+            border: 1.5px solid #000000;
+            border-radius: 9999px;
+            padding: 4px 10px;
+            font-size: 11px;
+            font-weight: 700;
+            white-space: nowrap;
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.18);
+            cursor: pointer;
+            transition: transform 0.15s ease;
           ">
-            <span>📍 ${place.name.length > 18 ? place.name.slice(0, 18) + '...' : place.name}</span>
-            ${place.ratingAverage ? `<span style="color:#eab308;">★ ${place.ratingAverage.toFixed(1)}</span>` : ''}
+            <span>📍 ${place.name.length > 20 ? place.name.slice(0, 20) + '...' : place.name}</span>
+            <span style="color: ${isTop ? '#facc15' : '#ca8a04'}; font-weight: 800;">★ ${Number(rating).toFixed(1)}</span>
           </div>
         `,
-        iconSize: [120, 24],
-        iconAnchor: [60, 12]
+        iconSize: [140, 26],
+        iconAnchor: [70, 13]
       });
 
       const marker = L.marker([pLat, pLng], { icon: placeIcon });
 
-      const popupContent = document.createElement('div');
-      popupContent.style.width = '240px';
-      popupContent.style.fontFamily = 'Inter, sans-serif';
-      popupContent.innerHTML = `
-        <div style="margin-bottom:8px; border-radius:6px; overflow:hidden; height:110px; background:#f1f5f9;">
+      const popupDiv = document.createElement('div');
+      popupDiv.style.width = '260px';
+      popupDiv.style.fontFamily = 'inherit';
+      popupDiv.innerHTML = `
+        <div style="margin-bottom:8px; border-radius:6px; overflow:hidden; height:120px; background:#f1f5f9; position:relative;">
           <img src="${place.images?.[0]?.url || 'https://images.unsplash.com/photo-1583417319070-4a69db38a482?w=800'}" 
                style="width:100%; height:100%; object-fit:cover;" />
+          <div style="position:absolute; top:6px; right:6px; background:#000000; color:#ffffff; font-size:10px; font-weight:800; padding:2px 6px; border-radius:4px;">
+            ★ ${Number(rating).toFixed(1)}
+          </div>
         </div>
-        <div style="font-weight:700; font-size:13px; color:#0f172a; margin-bottom:2px;">${place.name}</div>
-        <div style="font-size:11px; color:#64748b; margin-bottom:6px;">${place.address?.district || 'TP.HCM'} • ${place.ratingAverage ? '★ ' + place.ratingAverage.toFixed(1) + ' (' + place.reviewCount + ' reviews)' : 'Chưa có review'}</div>
-        <p style="font-size:11px; color:#334155; line-height:1.4; margin-bottom:8px; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;">
-          ${place.description || ''}
-        </p>
+        <div style="font-weight:800; font-size:13px; color:#000000; margin-bottom:4px; line-height:1.3;">
+          ${place.name}
+        </div>
+        <div style="font-size:11px; color:#64748b; margin-bottom:6px;">
+          📍 ${place.address?.street ? place.address.street + ', ' : ''}${place.address?.district || 'TP.HCM'}
+        </div>
+        ${place.openingHours ? `
+          <div style="font-size:11px; color:#334155; margin-bottom:4px;">
+            🕒 <strong>Giờ mở cửa:</strong> ${place.openingHours}
+          </div>
+        ` : ''}
+        ${place.ticketPrice ? `
+          <div style="font-size:11px; color:#334155; margin-bottom:8px;">
+            🎟️ <strong>Giá vé:</strong> ${place.ticketPrice}
+          </div>
+        ` : ''}
         <div style="display:flex; gap:6px; margin-top:8px;">
-          <button id="btn-detail-${place.id || place._id}" style="
-            flex:1; background:#0f172a; color:#fff; border:none; padding:5px 0; border-radius:4px; font-size:11px; font-weight:600; cursor:pointer;
+          <button id="btn-detail-${place.id || place._id || place.slug}" style="
+            flex:1; background:#000000; color:#ffffff; border:none; padding:7px 0; border-radius:9999px; font-size:11px; font-weight:700; cursor:pointer;
           ">
-            Xem chi tiết
+            Xem chi tiết & Đánh giá
           </button>
-          <button id="btn-add-${place.id || place._id}" style="
-            flex:1; background:#f1f5f9; color:#0f172a; border:1px solid #cbd5e1; padding:5px 0; border-radius:4px; font-size:11px; font-weight:600; cursor:pointer;
+          <button id="btn-trip-${place.id || place._id || place.slug}" style="
+            flex:1; background:#ffffff; color:#000000; border:1px solid #000000; padding:7px 0; border-radius:9999px; font-size:11px; font-weight:700; cursor:pointer;
           ">
             + Kế hoạch
           </button>
         </div>
       `;
 
-      marker.bindPopup(popupContent);
+      marker.bindPopup(popupDiv);
       marker.on('popupopen', () => {
-        const btnDetail = document.getElementById(`btn-detail-${place.id || place._id}`);
+        setSelectedPlaceInfo(place);
+        const pKey = place.id || place._id || place.slug;
+        const btnDetail = document.getElementById(`btn-detail-${pKey}`);
         if (btnDetail) {
           btnDetail.onclick = (e) => {
             e.stopPropagation();
-            onSelectPlace(place);
+            if (onSelectPlace) onSelectPlace(place);
           };
         }
-        const btnAdd = document.getElementById(`btn-add-${place.id || place._id}`);
-        if (btnAdd) {
-          btnAdd.onclick = (e) => {
+        const btnTrip = document.getElementById(`btn-trip-${pKey}`);
+        if (btnTrip) {
+          btnTrip.onclick = (e) => {
             e.stopPropagation();
-            onAddToTrip(place);
+            if (onAddToTrip) onAddToTrip(place);
           };
         }
       });
 
       marker.addTo(markersLayer);
     });
-  };
+
+    // Tự động căn khung hình nếu có địa điểm
+    if (bounds.isValid() && displayedPlaces.length > 0) {
+      if (viewScope === 'nearby') {
+        map.setView([userLocation.lat, userLocation.lng], 13);
+      } else if (displayedPlaces.length <= 3) {
+        map.fitBounds(bounds, { padding: [60, 60], maxZoom: 14 });
+      }
+    }
+  }, [displayedPlaces, viewScope, userLocation, searchRadius]);
 
   // Đổi kiểu hiển thị bản đồ
   const handleSwitchTileStyle = (styleKey) => {
@@ -364,165 +376,215 @@ export default function MapView({ onSelectPlace, onAddToTrip }) {
     }
   };
 
-  // Di chuyển nhanh tới các điểm trọng điểm TP.HCM
-  const handleQuickJump = (lat, lng) => {
-    const loc = { lat, lng };
-    setUserLocation(loc);
+  const handleQuickJumpToCity = (coords, zoom = 13) => {
     if (mapInstanceRef.current) {
-      mapInstanceRef.current.setView([lat, lng], 15);
+      mapInstanceRef.current.flyTo(coords, zoom, { duration: 1.2 });
     }
-    loadNearbyPlaces(lng, lat, searchRadius);
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-      {/* Thanh điều khiển tối giản trên bản đồ */}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      {/* Thanh điều khiển tối giản LonGo (Al Jazeera Design) */}
       <div style={{
+        background: 'var(--aj-surface, #ffffff)',
+        border: '1px solid var(--aj-hairline, #e2e8f0)',
+        borderRadius: 'var(--aj-rounded-md, 8px)',
+        padding: '14px 16px',
         display: 'flex',
         flexWrap: 'wrap',
         alignItems: 'center',
         justifyContent: 'space-between',
-        gap: 12,
-        background: '#ffffff',
-        padding: '12px 16px',
-        borderRadius: 'var(--radius-sm)',
-        border: '1px solid var(--border-light)'
+        gap: 12
       }}>
-        {/* Nút định vị lại & Trạng thái nhận diện */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-          <button 
-            onClick={() => autoDetectExactLocation()}
-            disabled={isLocating}
-            className="btn-clean-primary"
-            style={{ padding: '6px 14px', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: 6 }}
+        {/* Nhóm chọn chế độ xem */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <button
+            onClick={() => {
+              setViewScope('all');
+              handleQuickJumpToCity([10.7769, 106.7009], 11);
+            }}
+            className={viewScope === 'all' ? 'aj-pill-active' : 'aj-pill-inactive'}
+            style={{ fontSize: 13, display: 'inline-flex', alignItems: 'center', gap: 6 }}
           >
-            {isLocating ? <Loader2 size={14} className="spin" /> : <Navigation size={14} />}
-            <span>{isLocating ? 'Đang định vị...' : 'Định vị lại GPS'}</span>
+            <Compass size={14} />
+            Tất cả địa điểm ({places.length})
+          </button>
+          <button
+            onClick={() => {
+              setViewScope('nearby');
+              handleQuickJumpToCity([userLocation.lat, userLocation.lng], 13);
+            }}
+            className={viewScope === 'nearby' ? 'aj-pill-active' : 'aj-pill-inactive'}
+            style={{ fontSize: 13, display: 'inline-flex', alignItems: 'center', gap: 6 }}
+          >
+            <Navigation size={14} />
+            Gần vị trí của tôi
           </button>
 
-          {/* Trạng thái vị trí tự động */}
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 6,
-            fontSize: '0.8rem',
-            color: '#065f46',
-            background: '#ecfdf5',
-            padding: '4px 10px',
-            borderRadius: 9999,
-            border: '1px solid #a7f3d0'
-          }}>
-            <CheckCircle2 size={13} color="#059669" />
-            <span>{locationStatus}</span>
-          </div>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-            <span>Bán kính tìm kiếm:</span>
-            {[1000, 3000, 5000].map(r => (
-              <button
-                key={r}
-                onClick={() => {
-                  setSearchRadius(r);
-                  if (userLocation) {
-                    loadNearbyPlaces(userLocation.lng, userLocation.lat, r);
-                  }
-                }}
-                className={searchRadius === r ? 'btn-clean-primary' : 'btn-clean-ghost'}
-                style={{ padding: '4px 8px', fontSize: '0.8rem' }}
-              >
-                {r / 1000} km
-              </button>
-            ))}
-          </div>
+          {viewScope === 'nearby' && (
+            <select
+              value={searchRadius}
+              onChange={(e) => setSearchRadius(Number(e.target.value))}
+              style={{
+                padding: '6px 10px',
+                borderRadius: 'var(--aj-rounded-sm, 4px)',
+                border: '1px solid var(--aj-hairline, #cbd5e1)',
+                fontSize: 12,
+                fontWeight: 600,
+                background: '#ffffff',
+                cursor: 'pointer'
+              }}
+            >
+              <option value={3000}>Bán kính 3 km</option>
+              <option value={5000}>Bán kính 5 km</option>
+              <option value={10000}>Bán kính 10 km</option>
+              <option value={20000}>Bán kính 20 km</option>
+            </select>
+          )}
         </div>
 
-        {/* Khám phá các khu vực trọng điểm khác tại TP.HCM */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.85rem', flexWrap: 'wrap' }}>
-          <span style={{ color: 'var(--text-muted)' }}>Khám phá nhanh:</span>
-          <button 
-            onClick={() => handleQuickJump(10.7725, 106.6983)}
-            className="btn-clean-ghost" 
-            style={{ padding: '3px 8px', fontSize: '0.8rem' }}
-          >
-            Bến Thành (Q1)
-          </button>
-          <button 
-            onClick={() => handleQuickJump(10.7769, 106.7009)}
-            className="btn-clean-ghost" 
-            style={{ padding: '3px 8px', fontSize: '0.8rem' }}
-          >
-            Nhà Thờ Đức Bà
-          </button>
-          <button 
-            onClick={() => handleQuickJump(10.7952, 106.7218)}
-            className="btn-clean-ghost" 
-            style={{ padding: '3px 8px', fontSize: '0.8rem' }}
-          >
-            Landmark 81
-          </button>
-          <button 
-            onClick={() => handleQuickJump(10.8185, 106.6588)}
-            className="btn-clean-ghost" 
-            style={{ padding: '3px 8px', fontSize: '0.8rem' }}
-          >
-            Sân bay TSN
-          </button>
-        </div>
+        {/* Nhóm tìm kiếm nhanh & Đổi Tile map */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: '1 1 300px', justifyContent: 'flex-end' }}>
+          <div style={{ position: 'relative', width: '100%', maxWidth: 260 }}>
+            <Search size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#64748b' }} />
+            <input
+              type="text"
+              placeholder="Tìm tên địa điểm, quận huyện..."
+              value={searchKeyword}
+              onChange={(e) => setSearchKeyword(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '6px 10px 6px 30px',
+                borderRadius: 'var(--aj-rounded-sm, 4px)',
+                border: '1px solid var(--aj-hairline, #cbd5e1)',
+                fontSize: 12
+              }}
+            />
+          </div>
 
-        {/* Chuyển đổi lớp bản đồ */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.85rem' }}>
-          <span style={{ color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 4 }}>
-            <Layers size={13} /> Nền:
-          </span>
-          <button 
-            onClick={() => handleSwitchTileStyle('googleRoadmap')}
-            className={activeTileStyle === 'googleRoadmap' ? 'btn-clean-primary' : 'btn-clean-ghost'}
-            style={{ padding: '3px 8px', fontSize: '0.8rem' }}
-          >
-            Google Maps
-          </button>
-          <button 
-            onClick={() => handleSwitchTileStyle('esriStreet')}
-            className={activeTileStyle === 'esriStreet' ? 'btn-clean-primary' : 'btn-clean-ghost'}
-            style={{ padding: '3px 8px', fontSize: '0.8rem' }}
-          >
-            Esri Street
-          </button>
-          <button 
-            onClick={() => handleSwitchTileStyle('googleSatellite')}
-            className={activeTileStyle === 'googleSatellite' ? 'btn-clean-primary' : 'btn-clean-ghost'}
-            style={{ padding: '3px 8px', fontSize: '0.8rem' }}
-          >
-            Vệ tinh
-          </button>
+          <div style={{ display: 'flex', border: '1px solid var(--aj-hairline, #cbd5e1)', borderRadius: 'var(--aj-rounded-sm, 4px)', overflow: 'hidden' }}>
+            <button
+              onClick={() => handleSwitchTileStyle('googleRoadmap')}
+              style={{
+                padding: '6px 10px',
+                border: 'none',
+                background: activeTileStyle === 'googleRoadmap' ? '#000000' : '#ffffff',
+                color: activeTileStyle === 'googleRoadmap' ? '#ffffff' : '#000000',
+                fontSize: 11,
+                fontWeight: 700,
+                cursor: 'pointer'
+              }}
+            >
+              Đường phố
+            </button>
+            <button
+              onClick={() => handleSwitchTileStyle('googleSatellite')}
+              style={{
+                padding: '6px 10px',
+                border: 'none',
+                borderLeft: '1px solid var(--aj-hairline, #cbd5e1)',
+                background: activeTileStyle === 'googleSatellite' ? '#000000' : '#ffffff',
+                color: activeTileStyle === 'googleSatellite' ? '#ffffff' : '#000000',
+                fontSize: 11,
+                fontWeight: 700,
+                cursor: 'pointer'
+              }}
+            >
+              Vệ tinh
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* Container Bản đồ Leaflet */}
-      <div style={{
-        position: 'relative',
-        height: '560px',
-        borderRadius: 'var(--radius-md)',
-        overflow: 'hidden',
-        border: '1px solid var(--border-light)'
-      }}>
+      {/* Bộ lọc nhanh theo Khu vực trọng điểm */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, overflowX: 'auto', paddingBottom: 4 }}>
+        <span style={{ fontSize: 11, fontWeight: 800, textTransform: 'uppercase', color: '#64748b', whiteSpace: 'nowrap', marginRight: 4 }}>
+          Khu vực:
+        </span>
+        <button
+          onClick={() => handleQuickJumpToCity([10.7769, 106.7009], 13)}
+          style={{ padding: '4px 10px', borderRadius: 9999, border: '1px solid #cbd5e1', background: '#fff', fontSize: 11, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}
+        >
+          Quận 1 & Trung tâm
+        </button>
+        <button
+          onClick={() => handleQuickJumpToCity([10.8711, 106.8406], 12)}
+          style={{ padding: '4px 10px', borderRadius: 9999, border: '1px solid #cbd5e1', background: '#fff', fontSize: 11, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}
+        >
+          TP. Thủ Đức
+        </button>
+        <button
+          onClick={() => handleQuickJumpToCity([11.1432, 106.4632], 11)}
+          style={{ padding: '4px 10px', borderRadius: 9999, border: '1px solid #cbd5e1', background: '#fff', fontSize: 11, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}
+        >
+          Củ Chi & Cần Giờ
+        </button>
+        <button
+          onClick={() => handleQuickJumpToCity([10.3385, 107.0912], 12)}
+          style={{ padding: '4px 10px', borderRadius: 9999, border: '1px solid #cbd5e1', background: '#fff', fontSize: 11, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}
+        >
+          Vũng Tàu (Biển)
+        </button>
+        <button
+          onClick={() => handleQuickJumpToCity([11.3789, 106.1712], 11)}
+          style={{ padding: '4px 10px', borderRadius: 9999, border: '1px solid #cbd5e1', background: '#fff', fontSize: 11, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}
+        >
+          Tây Ninh (Núi Bà Đen)
+        </button>
+        <button
+          onClick={() => handleQuickJumpToCity([10.9805, 106.6521], 11)}
+          style={{ padding: '4px 10px', borderRadius: 9999, border: '1px solid #cbd5e1', background: '#fff', fontSize: 11, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}
+        >
+          Bình Dương & Đồng Nai
+        </button>
+        <button
+          onClick={() => handleQuickJumpToCity([10.3625, 106.3754], 11)}
+          style={{ padding: '4px 10px', borderRadius: 9999, border: '1px solid #cbd5e1', background: '#fff', fontSize: 11, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}
+        >
+          Tiền Giang (Mỹ Tho)
+        </button>
+      </div>
+
+      {/* Bản đồ Leaflet Container */}
+      <div style={{ position: 'relative', width: '100%', height: '560px', borderRadius: 'var(--aj-rounded-md, 8px)', overflow: 'hidden', border: '1px solid var(--aj-hairline, #cbd5e1)' }}>
         <div ref={mapContainerRef} style={{ width: '100%', height: '100%' }} />
 
-        {/* Floating summary info */}
+        {/* Badge đếm số lượng địa điểm đang hiển thị */}
         <div style={{
           position: 'absolute',
-          bottom: 16,
-          left: 16,
-          background: 'rgba(255, 255, 255, 0.95)',
-          backdropFilter: 'blur(8px)',
-          padding: '8px 14px',
-          borderRadius: 'var(--radius-sm)',
-          fontSize: '0.8rem',
-          color: 'var(--text-secondary)',
-          border: '1px solid var(--border-light)',
-          zIndex: 10
+          top: 14,
+          left: 14,
+          zIndex: 1000,
+          background: 'rgba(0, 0, 0, 0.85)',
+          color: '#ffffff',
+          padding: '6px 14px',
+          borderRadius: 9999,
+          fontSize: 12,
+          fontWeight: 700,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6,
+          backdropFilter: 'blur(4px)'
         }}>
-          {loading ? 'Đang truy vấn MongoDB 2dsphere...' : `Tìm thấy ${nearbyPlaces.length} địa điểm trong bán kính ${(searchRadius / 1000).toFixed(0)}km`}
+          <span>📍 Đang hiển thị: {displayedPlaces.length} địa điểm trên bản đồ</span>
+        </div>
+
+        {/* Trạng thái vị trí */}
+        <div style={{
+          position: 'absolute',
+          bottom: 14,
+          left: 14,
+          zIndex: 1000,
+          background: 'rgba(255, 255, 255, 0.95)',
+          color: '#0f172a',
+          padding: '5px 12px',
+          borderRadius: 4,
+          fontSize: 11,
+          fontWeight: 600,
+          border: '1px solid #cbd5e1',
+          boxShadow: '0 2px 6px rgba(0,0,0,0.1)'
+        }}>
+          {isLocating ? '⏳ ' + locationStatus : '✅ ' + locationStatus}
         </div>
       </div>
     </div>

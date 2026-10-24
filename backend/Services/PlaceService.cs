@@ -77,7 +77,14 @@ public class PlaceService : IPlaceService
 
     public async Task<Place?> GetPlaceByIdAsync(string id)
     {
-        return await _context.Places.Find(p => p.Id == id && p.Status == "active").FirstOrDefaultAsync();
+        if (ObjectId.TryParse(id, out _))
+        {
+            var byId = await _context.Places.Find(p => p.Id == id && p.Status == "active").FirstOrDefaultAsync();
+            if (byId != null) return byId;
+        }
+
+        var cleanId = id.StartsWith("place-") ? id.Substring(6) : id;
+        return await _context.Places.Find(p => (p.Slug == id || p.Slug == cleanId) && p.Status == "active").FirstOrDefaultAsync();
     }
 
     public async Task<List<Place>> GetNearbyPlacesAsync(NearbyQuery query)
@@ -160,10 +167,27 @@ public class PlaceService : IPlaceService
             Comments = new List<Comment>()
         };
 
+        // Tìm địa điểm theo Id hoặc Slug
+        Place? targetPlace = null;
+        if (ObjectId.TryParse(placeId, out _))
+        {
+            targetPlace = await _context.Places.Find(p => p.Id == placeId).FirstOrDefaultAsync();
+        }
+        if (targetPlace == null)
+        {
+            var cleanId = placeId.StartsWith("place-") ? placeId.Substring(6) : placeId;
+            targetPlace = await _context.Places.Find(p => p.Slug == placeId || p.Slug == cleanId).FirstOrDefaultAsync();
+        }
+        if (targetPlace == null)
+        {
+            throw new InvalidOperationException("Địa điểm không tồn tại.");
+        }
+        var actualPlaceId = targetPlace.Id;
+
         // Bất biến BR-08: Mỗi user chỉ có 1 active review trên mỗi địa điểm.
         // Thực thi kiểm tra nguyên tử: Chỉ push nếu mảng reviews không chứa review của userId này
         var filter = Builders<Place>.Filter.And(
-            Builders<Place>.Filter.Eq(p => p.Id, placeId),
+            Builders<Place>.Filter.Eq(p => p.Id, actualPlaceId),
             Builders<Place>.Filter.Not(Builders<Place>.Filter.ElemMatch(p => p.Reviews, r => r.UserId == userId))
         );
 
@@ -172,11 +196,11 @@ public class PlaceService : IPlaceService
 
         if (result.ModifiedCount == 0)
         {
-            throw new InvalidOperationException("Bạn đã có bài đánh giá trên địa điểm này rồi hoặc địa điểm không tồn tại.");
+            throw new InvalidOperationException("Bạn đã có bài đánh giá trên địa điểm này rồi.");
         }
 
         // Cập nhật lại rating average và review count qua Aggregation
-        await RecalculateRatingAndCountAsync(placeId);
+        await RecalculateRatingAndCountAsync(actualPlaceId);
         return true;
     }
 
