@@ -24,4 +24,5 @@ public class MongoDbContext
     public IMongoCollection<Report> Reports => _database.GetCollection<Report>("reports");
     public IMongoCollection<Favorite> Favorites => _database.GetCollection<Favorite>("favorites");
     public IMongoCollection<ViewHistory> ViewHistories => _database.GetCollection<ViewHistory>("view_history");
+    public IMongoCollection<CommunityPost> CommunityPosts => _database.GetCollection<CommunityPost>("community_posts");
 }

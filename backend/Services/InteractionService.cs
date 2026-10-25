@@ -303,11 +303,28 @@ public class InteractionService : IInteractionService
             };
         }).ToList();
 
+        // Tổng số lượt truy cập (visitCount) từ các địa điểm
+        var visitPipeline = new BsonDocument[]
+        {
+            new("$group", new BsonDocument
+            {
+                { "_id", BsonNull.Value },
+                { "totalVisits", new BsonDocument("$sum", "$visitCount") }
+            })
+        };
+        var visitAgg = await (await _context.Places.AggregateAsync<BsonDocument>(visitPipeline)).FirstOrDefaultAsync();
+        var totalVisits = visitAgg != null && visitAgg.Contains("totalVisits") ? visitAgg["totalVisits"].ToInt64() : 0;
+
+        // Tổng bài đăng cộng đồng
+        var postCount = await _context.CommunityPosts.CountDocumentsAsync(FilterDefinition<CommunityPost>.Empty);
+
         return new BsonDocument
         {
             { "totalPlaces", placeCount },
             { "totalUsers", userCount },
             { "totalReviews", totalReviews },
+            { "totalVisits", totalVisits },
+            { "totalPosts", postCount },
             { "averageRating", avgRating },
             { "pendingProposals", pendingProposals },
             { "pendingReports", pendingReports },

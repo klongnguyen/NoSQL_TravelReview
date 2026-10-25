@@ -79,6 +79,8 @@ public class CreateCommentRequest
     [Required]
     [MinLength(2, ErrorMessage = "Nội dung bình luận quá ngắn")]
     public string Content { get; set; } = string.Empty;
+
+    public CommentImage? Image { get; set; }
 }
 
 public class CreateReplyRequest

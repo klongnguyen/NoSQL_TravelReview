@@ -19,6 +19,7 @@ builder.Services.AddSingleton<MongoDbContext>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IPlaceService, PlaceService>();
 builder.Services.AddScoped<IInteractionService, InteractionService>();
+builder.Services.AddScoped<ICommunityPostService, CommunityPostService>();
 builder.Services.AddScoped<INeo4jRecommendationService, Neo4jRecommendationService>();
 builder.Services.AddScoped<IDatabaseSeeder, DatabaseSeeder>();
 

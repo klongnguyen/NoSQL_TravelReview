@@ -184,4 +184,37 @@ public class PlacesController : ControllerBase
         }
         return Ok(new { message = "Đã cập nhật trạng thái thích." });
     }
+
+    [HttpPost("{id}/visit")]
+    public async Task<IActionResult> RecordVisit(string id)
+    {
+        await _placeService.RecordVisitAsync(id);
+        return Ok(new { message = "Ghi nhận lượt truy cập thành công." });
+    }
+
+    [Authorize]
+    [HttpPost("{id}/reviews/{reviewId}/comments/{commentId}/like")]
+    public async Task<IActionResult> ToggleCommentLike(string id, string reviewId, string commentId)
+    {
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var success = await _placeService.ToggleCommentLikeAsync(id, reviewId, commentId, userId);
+        if (!success)
+        {
+            return BadRequest(new { message = "Không thể cập nhật thích bình luận." });
+        }
+        return Ok(new { message = "Đã cập nhật trạng thái thích bình luận." });
+    }
+
+    [Authorize]
+    [HttpPost("{id}/reviews/{reviewId}/comments/{commentId}/dislike")]
+    public async Task<IActionResult> ToggleCommentDislike(string id, string reviewId, string commentId)
+    {
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var success = await _placeService.ToggleCommentDislikeAsync(id, reviewId, commentId, userId);
+        if (!success)
+        {
+            return BadRequest(new { message = "Không thể cập nhật không thích bình luận." });
+        }
+        return Ok(new { message = "Đã cập nhật trạng thái không thích bình luận." });
+    }
 }

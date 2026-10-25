@@ -59,6 +59,41 @@ public class ReviewImage
 }
 
 /// <summary>
+/// Metadata ảnh phân tán trong bình luận
+/// </summary>
+[BsonIgnoreExtraElements]
+public class CommentImage
+{
+    [BsonElement("url")]
+    public string Url { get; set; } = string.Empty;
+
+    [BsonElement("storageKey")]
+    public string? StorageKey { get; set; }
+
+    [BsonElement("storageProvider")]
+    public string StorageProvider { get; set; } = "Cloudinary_Distributed_CDN";
+
+    [BsonElement("uploadedBy")]
+    [BsonRepresentation(BsonType.ObjectId)]
+    public string UploadedBy { get; set; } = string.Empty;
+
+    [BsonElement("uploaderName")]
+    public string UploaderName { get; set; } = string.Empty;
+
+    [BsonElement("uploadedAt")]
+    public DateTime UploadedAt { get; set; } = DateTime.UtcNow;
+
+    [BsonElement("fileSizeBytes")]
+    public long? FileSizeBytes { get; set; }
+
+    [BsonElement("format")]
+    public string? Format { get; set; }
+
+    [BsonElement("mimeType")]
+    public string? MimeType { get; set; }
+}
+
+/// <summary>
 /// Trả lời bình luận tầng 2 (Tuyệt đối không có tầng 3)
 /// </summary>
 [BsonIgnoreExtraElements]
@@ -112,9 +147,16 @@ public class Comment
     [BsonElement("content")]
     public string Content { get; set; } = string.Empty;
 
+    [BsonElement("image")]
+    public CommentImage? Image { get; set; }
+
     [BsonElement("likes")]
     [BsonRepresentation(BsonType.ObjectId)]
     public List<string> Likes { get; set; } = new();
+
+    [BsonElement("dislikes")]
+    [BsonRepresentation(BsonType.ObjectId)]
+    public List<string> Dislikes { get; set; } = new();
 
     [BsonElement("createdAt")]
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
@@ -210,6 +252,9 @@ public class Place
 
     [BsonElement("reviewCount")]
     public int ReviewCount { get; set; } = 0;
+
+    [BsonElement("visitCount")]
+    public int VisitCount { get; set; } = 0;
 
     [BsonElement("createdAt")]
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;

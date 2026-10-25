@@ -19,6 +19,9 @@ public interface IPlaceService
     Task<bool> AddCommentAsync(string placeId, string reviewId, string userId, string userName, string? userAvatar, CreateCommentRequest request);
     Task<bool> AddReplyAsync(string placeId, string reviewId, string commentId, string userId, string userName, string? userAvatar, CreateReplyRequest request);
     Task<bool> ToggleReviewLikeAsync(string placeId, string reviewId, string userId);
+    Task<bool> ToggleCommentLikeAsync(string placeId, string reviewId, string commentId, string userId);
+    Task<bool> ToggleCommentDislikeAsync(string placeId, string reviewId, string commentId, string userId);
+    Task RecordVisitAsync(string placeId);
     Task RecalculateRatingAndCountAsync(string placeId);
 }
 
@@ -284,6 +287,23 @@ public class PlaceService : IPlaceService
         string? userAvatar,
         CreateCommentRequest request)
     {
+        CommentImage? commentImage = null;
+        if (request.Image != null && !string.IsNullOrWhiteSpace(request.Image.Url))
+        {
+            commentImage = new CommentImage
+            {
+                Url = request.Image.Url,
+                StorageKey = request.Image.StorageKey ?? $"cmt_{Guid.NewGuid():N}",
+                StorageProvider = !string.IsNullOrWhiteSpace(request.Image.StorageProvider) ? request.Image.StorageProvider : "Cloudinary_Distributed_CDN",
+                UploadedBy = userId,
+                UploaderName = userName,
+                UploadedAt = DateTime.UtcNow,
+                FileSizeBytes = request.Image.FileSizeBytes,
+                Format = request.Image.Format ?? "jpg",
+                MimeType = request.Image.MimeType ?? "image/jpeg"
+            };
+        }
+
         var newComment = new Comment
         {
             CommentId = ObjectId.GenerateNewId().ToString(),
@@ -291,7 +311,9 @@ public class PlaceService : IPlaceService
             UserName = userName,
             UserAvatar = userAvatar,
             Content = request.Content,
+            Image = commentImage,
             Likes = new List<string>(),
+            Dislikes = new List<string>(),
             CreatedAt = DateTime.UtcNow,
             Replies = new List<Reply>()
         };
@@ -366,6 +388,75 @@ public class PlaceService : IPlaceService
 
         var result = await _context.Places.UpdateOneAsync(filter, update);
         return result.ModifiedCount > 0;
+    }
+
+    public async Task<bool> ToggleCommentLikeAsync(string placeId, string reviewId, string commentId, string userId)
+    {
+        var place = await _context.Places.Find(p => p.Id == placeId).FirstOrDefaultAsync();
+        var review = place?.Reviews.FirstOrDefault(r => r.ReviewId == reviewId);
+        var comment = review?.Comments.FirstOrDefault(c => c.CommentId == commentId);
+        if (comment == null) return false;
+
+        var filter = Builders<Place>.Filter.Eq(p => p.Id, placeId);
+        UpdateDefinition<Place> update;
+
+        if (comment.Likes.Contains(userId))
+        {
+            update = Builders<Place>.Update.Pull("reviews.$[rev].comments.$[cmt].likes", userId);
+        }
+        else
+        {
+            update = Builders<Place>.Update
+                .AddToSet("reviews.$[rev].comments.$[cmt].likes", userId)
+                .Pull("reviews.$[rev].comments.$[cmt].dislikes", userId);
+        }
+
+        var arrayFilters = new List<ArrayFilterDefinition>
+        {
+            new BsonDocumentArrayFilterDefinition<BsonDocument>(new BsonDocument("rev.reviewId", reviewId)),
+            new BsonDocumentArrayFilterDefinition<BsonDocument>(new BsonDocument("cmt.commentId", commentId))
+        };
+
+        var result = await _context.Places.UpdateOneAsync(filter, update, new UpdateOptions { ArrayFilters = arrayFilters });
+        return result.ModifiedCount > 0;
+    }
+
+    public async Task<bool> ToggleCommentDislikeAsync(string placeId, string reviewId, string commentId, string userId)
+    {
+        var place = await _context.Places.Find(p => p.Id == placeId).FirstOrDefaultAsync();
+        var review = place?.Reviews.FirstOrDefault(r => r.ReviewId == reviewId);
+        var comment = review?.Comments.FirstOrDefault(c => c.CommentId == commentId);
+        if (comment == null) return false;
+
+        var filter = Builders<Place>.Filter.Eq(p => p.Id, placeId);
+        UpdateDefinition<Place> update;
+
+        if (comment.Dislikes.Contains(userId))
+        {
+            update = Builders<Place>.Update.Pull("reviews.$[rev].comments.$[cmt].dislikes", userId);
+        }
+        else
+        {
+            update = Builders<Place>.Update
+                .AddToSet("reviews.$[rev].comments.$[cmt].dislikes", userId)
+                .Pull("reviews.$[rev].comments.$[cmt].likes", userId);
+        }
+
+        var arrayFilters = new List<ArrayFilterDefinition>
+        {
+            new BsonDocumentArrayFilterDefinition<BsonDocument>(new BsonDocument("rev.reviewId", reviewId)),
+            new BsonDocumentArrayFilterDefinition<BsonDocument>(new BsonDocument("cmt.commentId", commentId))
+        };
+
+        var result = await _context.Places.UpdateOneAsync(filter, update, new UpdateOptions { ArrayFilters = arrayFilters });
+        return result.ModifiedCount > 0;
+    }
+
+    public async Task RecordVisitAsync(string placeId)
+    {
+        var filter = Builders<Place>.Filter.Eq(p => p.Id, placeId);
+        var update = Builders<Place>.Update.Inc(p => p.VisitCount, 1);
+        await _context.Places.UpdateOneAsync(filter, update);
     }
 
     public async Task RecalculateRatingAndCountAsync(string placeId)

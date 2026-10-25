@@ -10,7 +10,7 @@ import {
   VIETNAM_SPECIAL_ISLANDS 
 } from '../data/vietnamProvincesMapData';
 
-export default function VietnamInteractiveMap({ onExploreProvince }) {
+export default function VietnamInteractiveMap({ onExploreProvince, onProposePlace }) {
   // Mặc định chọn TP. Hồ Chí Minh
   const defaultProv = VIETNAM_PROVINCES_DATA.find(p => p.id === 'vn-hc') || VIETNAM_PROVINCES_DATA[0];
   const [selectedProvince, setSelectedProvince] = useState(defaultProv);
@@ -19,29 +19,23 @@ export default function VietnamInteractiveMap({ onExploreProvince }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
   
-  // Điều khiển ViewBox thông minh cho từng vùng miền (Rộng 8800 để hiển thị trọn vẹn Biển Đông)
+  // Điều khiển ViewBox thông minh cho 3 vùng miền
   const REGION_VIEWBOXES = {
     'all': '0 0 8800 11000',
-    'bac-bo': '0 0 5500 4500',
-    'trung-bo': '1000 3200 7000 4800',
-    'tay-nguyen': '1600 5800 3500 3800',
-    'dong-nam-bo': '1800 7800 3500 3100',
-    'tay-nam-bo': '500 8400 3900 2500',
-    'bien-dong': '3500 3200 5200 7000'
+    'bac': '0 0 5500 4500',
+    'trung': '1000 3000 6800 5500',
+    'nam': '500 7600 4500 3400'
   };
 
   const [currentViewBox, setCurrentViewBox] = useState(REGION_VIEWBOXES['all']);
   const mapContainerRef = useRef(null);
 
-  // Bộ lọc vùng miền
+  // Bộ lọc đúng 3 vùng miền theo yêu cầu
   const REGION_TABS = [
     { key: 'all', label: 'Toàn quốc (63 Tỉnh)' },
-    { key: 'bac-bo', label: 'Miền Bắc' },
-    { key: 'trung-bo', label: 'Miền Trung' },
-    { key: 'tay-nguyen', label: 'Tây Nguyên' },
-    { key: 'dong-nam-bo', label: 'Đông Nam Bộ' },
-    { key: 'tay-nam-bo', label: 'Tây Nam Bộ' },
-    { key: 'bien-dong', label: 'Hoàng Sa & Trường Sa' }
+    { key: 'bac', label: 'Miền Bắc' },
+    { key: 'trung', label: 'Miền Trung' },
+    { key: 'nam', label: 'Miền Nam' }
   ];
 
   // Danh sách toàn bộ lãnh thổ gồm 63 tỉnh thành và 2 quần đảo Hoàng Sa, Trường Sa
@@ -49,38 +43,37 @@ export default function VietnamInteractiveMap({ onExploreProvince }) {
     return [...VIETNAM_PROVINCES_DATA, ...VIETNAM_SPECIAL_ISLANDS];
   }, []);
 
-  // Lọc danh sách tỉnh thành dựa theo từ khóa tìm kiếm và tab vùng miền
+  // Hàm kiểm tra tỉnh thuộc miền nào
+  const isProvinceInRegion = (prov, regionKey) => {
+    if (regionKey === 'all') return true;
+    const r = (prov.region || '').toLowerCase();
+    if (regionKey === 'bac') {
+      return r.includes('bắc') || r.includes('sông hồng') || r.includes('hà nội');
+    }
+    if (regionKey === 'trung') {
+      return r.includes('trung') || r.includes('tây nguyên') || prov.regionKey === 'bien-dong' || r.includes('biển đông');
+    }
+    if (regionKey === 'nam') {
+      return r.includes('nam') || r.includes('cửu long') || r.includes('sài gòn') || r.includes('hồ chí minh');
+    }
+    return true;
+  };
+
+  // Danh sách gợi ý tìm kiếm tức thì
+  const searchSuggestions = useMemo(() => {
+    if (!searchTerm.trim()) return [];
+    const term = searchTerm.toLowerCase().trim();
+    return allTerritories.filter(prov => 
+      prov.name.toLowerCase().includes(term) ||
+      (prov.fullName && prov.fullName.toLowerCase().includes(term)) ||
+      (prov.famousLandmarks && prov.famousLandmarks.some(l => l.toLowerCase().includes(term)))
+    ).slice(0, 6);
+  }, [allTerritories, searchTerm]);
+
+  // Lọc danh sách tỉnh thành dựa theo tab 3 vùng miền
   const filteredProvinces = useMemo(() => {
-    return allTerritories.filter(prov => {
-      const matchSearch = !searchTerm.trim() || 
-        prov.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        prov.fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        prov.region.toLowerCase().includes(searchTerm.toLowerCase());
-
-      if (!matchSearch) return false;
-
-      if (activeRegionTab === 'all') return true;
-      if (activeRegionTab === 'bac-bo') {
-        return prov.region.includes('Bắc') || prov.region.includes('Sông Hồng');
-      }
-      if (activeRegionTab === 'trung-bo') {
-        return prov.region.includes('Trung');
-      }
-      if (activeRegionTab === 'tay-nguyen') {
-        return prov.region.includes('Tây Nguyên');
-      }
-      if (activeRegionTab === 'dong-nam-bo') {
-        return prov.region.includes('Đông Nam Bộ');
-      }
-      if (activeRegionTab === 'tay-nam-bo') {
-        return prov.region.includes('Cửu Long') || prov.region.includes('Tây');
-      }
-      if (activeRegionTab === 'bien-dong') {
-        return prov.regionKey === 'bien-dong' || prov.region.includes('Biển Đông');
-      }
-      return true;
-    });
-  }, [allTerritories, searchTerm, activeRegionTab]);
+    return allTerritories.filter(prov => isProvinceInRegion(prov, activeRegionTab));
+  }, [allTerritories, activeRegionTab]);
 
   // Xử lý chuyển tab vùng miền: Tự động zoom bản đồ vào vùng đó
   const handleTabChange = (key) => {
@@ -91,6 +84,22 @@ export default function VietnamInteractiveMap({ onExploreProvince }) {
   // Xử lý chọn tỉnh: bôi đen và mở thông tin
   const handleSelectProvince = (prov) => {
     setSelectedProvince(prov);
+  };
+
+  // Chọn tỉnh từ kết quả tìm kiếm: highlight + zoom bản đồ
+  const handleSelectFromSearch = (prov) => {
+    setSelectedProvince(prov);
+    setSearchTerm('');
+    if (isProvinceInRegion(prov, 'bac')) {
+      setActiveRegionTab('bac');
+      setCurrentViewBox(REGION_VIEWBOXES['bac']);
+    } else if (isProvinceInRegion(prov, 'trung')) {
+      setActiveRegionTab('trung');
+      setCurrentViewBox(REGION_VIEWBOXES['trung']);
+    } else {
+      setActiveRegionTab('nam');
+      setCurrentViewBox(REGION_VIEWBOXES['nam']);
+    }
   };
 
   // Zoom thủ công (+, -, Reset)
@@ -169,6 +178,48 @@ export default function VietnamInteractiveMap({ onExploreProvince }) {
             >
               <X size={15} />
             </button>
+          )}
+
+          {/* DROPDOWN GỢI Ý TỈNH THÀNH KHI GÕ TÌM KIẾM */}
+          {searchSuggestions.length > 0 && (
+            <div style={{
+              position: 'absolute',
+              top: '100%',
+              left: 0,
+              right: 0,
+              marginTop: 6,
+              background: '#ffffff',
+              borderRadius: '12px',
+              border: '1px solid var(--aj-hairline)',
+              boxShadow: '0 10px 25px -5px rgba(0,0,0,0.15)',
+              zIndex: 100,
+              overflow: 'hidden'
+            }}>
+              {searchSuggestions.map((prov) => (
+                <div
+                  key={prov.id}
+                  onClick={() => handleSelectFromSearch(prov)}
+                  style={{
+                    padding: '10px 16px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    cursor: 'pointer',
+                    borderBottom: '1px solid #f1f5f9',
+                    fontSize: '13px',
+                    transition: 'background 0.15s ease'
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f8fafc'}
+                  onMouseLeave={e => e.currentTarget.style.backgroundColor = '#ffffff'}
+                >
+                  <div>
+                    <span style={{ fontWeight: 800, color: '#0f172a' }}>{prov.fullName || prov.name}</span>
+                    <span style={{ fontSize: '11px', color: '#64748b', marginLeft: 8 }}>• {prov.region}</span>
+                  </div>
+                  <ChevronRight size={14} color="#94a3b8" />
+                </div>
+              ))}
+            </div>
           )}
         </div>
 
@@ -467,14 +518,15 @@ export default function VietnamInteractiveMap({ onExploreProvince }) {
 
                 <div style={{
                   padding: '4px 10px',
-                  background: '#0f172a',
-                  color: '#ffffff',
+                  background: '#f1f5f9',
+                  color: '#0f172a',
+                  border: '1px solid var(--aj-hairline)',
                   fontSize: '11px',
                   fontWeight: 800,
                   borderRadius: '16px',
                   textTransform: 'uppercase'
                 }}>
-                  Đang bôi đen
+                  {selectedProvince.region || 'Việt Nam'}
                 </div>
               </div>
 
@@ -622,6 +674,34 @@ export default function VietnamInteractiveMap({ onExploreProvince }) {
                 <span>Khám phá các địa điểm tại {selectedProvince.name} trên LonGo</span>
                 <ChevronRight size={16} />
               </button>
+
+              {onProposePlace && (
+                <button
+                  onClick={() => onProposePlace(selectedProvince)}
+                  style={{
+                    width: '100%',
+                    marginTop: 8,
+                    padding: '11px 18px',
+                    background: '#ffffff',
+                    color: '#000000',
+                    border: '1px solid var(--aj-hairline)',
+                    borderRadius: '6px',
+                    fontSize: '13px',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 6,
+                    transition: 'all 0.15s ease'
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8fafc'}
+                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#ffffff'}
+                >
+                  <Plus size={14} />
+                  <span>Đề xuất địa điểm mới tại {selectedProvince.name}</span>
+                </button>
+              )}
             </div>
           ) : (
             <div style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--aj-slate)' }}>

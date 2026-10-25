@@ -1,7 +1,7 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
   Trophy, Star, MapPin, Award, Clock, Calendar, 
-  ExternalLink, Heart, ChevronRight, Filter, Sparkles, CheckCircle2 
+  ExternalLink, Heart, ChevronRight, ChevronLeft, Filter, Sparkles, CheckCircle2 
 } from 'lucide-react';
 import { getPlaceTimingDetails } from '../utils/placeTimingHelper';
 
@@ -83,8 +83,23 @@ export default function RankingLeaderboard({ places = [], onSelectPlace, onToggl
     return scoredList;
   }, [places, selectedRegion, selectedCategory, selectedMonth]);
 
-  const top1Place = rankedPlaces[0];
-  const otherRankedPlaces = rankedPlaces.slice(1);
+  const [currentPage, setCurrentPage] = useState(1);
+  const PAGE_SIZE = 10;
+  const totalPages = Math.ceil(rankedPlaces.length / PAGE_SIZE) || 1;
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [selectedRegion, selectedCategory, selectedMonth]);
+
+  // Cắt danh sách 10 hạng theo trang hiện tại
+  const paginatedPlaces = useMemo(() => {
+    const start = (currentPage - 1) * PAGE_SIZE;
+    return rankedPlaces.slice(start, start + PAGE_SIZE);
+  }, [rankedPlaces, currentPage]);
+
+  const showHeroTop1 = currentPage === 1 && paginatedPlaces.length > 0;
+  const top1Place = showHeroTop1 ? paginatedPlaces[0] : null;
+  const otherRankedPlaces = showHeroTop1 ? paginatedPlaces.slice(1) : paginatedPlaces;
 
   return (
     <div style={{ maxWidth: 1200, margin: '0 auto', padding: '32px 20px 80px 20px' }}>
@@ -342,7 +357,7 @@ export default function RankingLeaderboard({ places = [], onSelectPlace, onToggl
           ───────────────────────────────────────────────────────────── */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
         {otherRankedPlaces.map((place, index) => {
-          const rank = index + 2;
+          const rank = showHeroTop1 ? index + 2 : (currentPage - 1) * PAGE_SIZE + index + 1;
           const isTop3 = rank <= 3;
           const isFav = favoritePlaceIds.includes(place.id || place._id);
 
@@ -531,6 +546,100 @@ export default function RankingLeaderboard({ places = [], onSelectPlace, onToggl
           );
         })}
       </div>
+
+      {/* THANH PHÂN TRANG (10 HẠNG / TRANG) */}
+      {totalPages > 1 && (
+        <div style={{
+          marginTop: 32,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: 16,
+          padding: '16px 20px',
+          background: '#ffffff',
+          border: '1px solid var(--aj-hairline)',
+          borderRadius: 'var(--aj-rounded-md)'
+        }}>
+          <div style={{ fontSize: '13px', color: 'var(--aj-slate)', fontWeight: 600 }}>
+            Hiển thị hạng <strong>{((currentPage - 1) * PAGE_SIZE) + 1}</strong> – <strong>{Math.min(currentPage * PAGE_SIZE, rankedPlaces.length)}</strong> trên tổng số <strong>{rankedPlaces.length}</strong> địa điểm
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <button
+              disabled={currentPage === 1}
+              onClick={() => {
+                setCurrentPage(p => Math.max(1, p - 1));
+                window.scrollTo({ top: 380, behavior: 'smooth' });
+              }}
+              style={{
+                padding: '6px 12px',
+                borderRadius: '4px',
+                border: '1px solid var(--aj-hairline)',
+                background: currentPage === 1 ? '#f8fafc' : '#ffffff',
+                color: currentPage === 1 ? '#94a3b8' : 'var(--aj-ink)',
+                fontSize: '13px',
+                fontWeight: 700,
+                cursor: currentPage === 1 ? 'not-allowed' : 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 4
+              }}
+            >
+              <ChevronLeft size={14} />
+              <span>Trước</span>
+            </button>
+
+            {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
+              <button
+                key={page}
+                onClick={() => {
+                  setCurrentPage(page);
+                  window.scrollTo({ top: 380, behavior: 'smooth' });
+                }}
+                style={{
+                  width: 32,
+                  height: 32,
+                  borderRadius: '4px',
+                  border: '1px solid',
+                  borderColor: currentPage === page ? '#000000' : 'var(--aj-hairline)',
+                  background: currentPage === page ? '#000000' : '#ffffff',
+                  color: currentPage === page ? '#ffffff' : 'var(--aj-ink)',
+                  fontSize: '13px',
+                  fontWeight: 700,
+                  cursor: 'pointer'
+                }}
+              >
+                {page}
+              </button>
+            ))}
+
+            <button
+              disabled={currentPage === totalPages}
+              onClick={() => {
+                setCurrentPage(p => Math.min(totalPages, p + 1));
+                window.scrollTo({ top: 380, behavior: 'smooth' });
+              }}
+              style={{
+                padding: '6px 12px',
+                borderRadius: '4px',
+                border: '1px solid var(--aj-hairline)',
+                background: currentPage === totalPages ? '#f8fafc' : '#ffffff',
+                color: currentPage === totalPages ? '#94a3b8' : 'var(--aj-ink)',
+                fontSize: '13px',
+                fontWeight: 700,
+                cursor: currentPage === totalPages ? 'not-allowed' : 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 4
+              }}
+            >
+              <span>Sau</span>
+              <ChevronRight size={14} />
+            </button>
+          </div>
+        </div>
+      )}
 
     </div>
   );

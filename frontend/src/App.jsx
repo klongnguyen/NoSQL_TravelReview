@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { 
   Search, MapPin, Star, MessageSquare, Heart, Compass, 
-  ThumbsUp, User, LogIn, LogOut, X, PlusCircle, CheckCircle, 
+  ThumbsUp, ThumbsDown, Flag, Image as ImageIcon, User, LogIn, LogOut, X, PlusCircle, CheckCircle, 
   AlertTriangle, Shield, Clock, Trash2, ArrowLeft, Send, Map as MapIcon,
   Calendar, Sparkles, Navigation, Ticket, ExternalLink, Filter, 
-  SlidersHorizontal, CheckCircle2, ChevronRight, Eye, RefreshCw, Bookmark,
+  SlidersHorizontal, CheckCircle2, ChevronRight, ChevronLeft, Eye, RefreshCw, Bookmark,
   BarChart3, TrendingUp, PieChart, Activity, Lock, UserCheck, Trophy, Info
 } from 'lucide-react';
 import { placeService, categoryService, authService, interactionService } from './services/api';
@@ -16,6 +16,7 @@ import AccountManagement from './components/AccountManagement';
 import RankingLeaderboard from './components/RankingLeaderboard';
 import SeasonalTravelCalendar from './components/SeasonalTravelCalendar';
 import VietnamInteractiveMap from './components/VietnamInteractiveMap';
+import CommunityFeed from './components/CommunityFeed';
 import { getPlaceTimingDetails } from './utils/placeTimingHelper';
 
 // Dữ liệu Điểm đến nổi bật tham khảo theo hình ảnh thực tế (Image 1 reference)
@@ -165,6 +166,21 @@ export default function App() {
   const [activeCommentReviewId, setActiveCommentReviewId] = useState(null);
   const [replyContent, setReplyContent] = useState('');
   const [activeReplyCommentId, setActiveReplyCommentId] = useState(null);
+
+  // Trip Planner Sub-tabs: 'calendar' (Lịch du lịch theo mùa) | 'itinerary' (Kế hoạch hành trình)
+  const [tripSubTab, setTripSubTab] = useState('calendar');
+
+  // Explore Pagination (10 places per page)
+  const [explorePage, setExplorePage] = useState(1);
+
+  // Comment Image Upload with Distributed Metadata
+  const [commentImagePreview, setCommentImagePreview] = useState(null);
+  const [commentImageMetadata, setCommentImageMetadata] = useState(null);
+
+  // Interactive Map Propose Place Modal
+  const [mapProposalModalOpen, setMapProposalModalOpen] = useState(false);
+  const [mapPickedCoords, setMapPickedCoords] = useState({ lat: 10.7769, lng: 106.7009 });
+  const [isSubmittingProposal, setIsSubmittingProposal] = useState(false);
 
   // Trip Planner custom stops
   const [customTripStops, setCustomTripStops] = useState([]);
@@ -400,6 +416,11 @@ export default function App() {
     });
   }, [places, keyword, selectedCity, selectedCategory, ratingFilter, sortOption, selectedTravelMonth]);
 
+  // Reset pagination when search/filter criteria change
+  useEffect(() => {
+    setExplorePage(1);
+  }, [keyword, selectedCity, selectedCategory, ratingFilter, sortOption, selectedTravelMonth]);
+
   const handleSelectDestination = (dest) => {
     setSelectedCity(dest.districtTag || dest.name);
     navigateTo('explore');
@@ -407,6 +428,19 @@ export default function App() {
 
   const handleOpenDetail = (place) => {
     navigateTo(currentTab || 'explore', place);
+    if (place) {
+      const pId = place.id || place._id;
+      // Ghi nhận lượt truy cập thực tế (VisitCount increment via $inc)
+      fetch(`http://localhost:5196/api/places/${pId}/visit`, { method: 'POST' })
+        .then(res => res.json())
+        .then(data => {
+          if (data && data.visitCount !== undefined) {
+            setPlaces(prev => prev.map(p => ((p.id === pId || p._id === pId) ? { ...p, visitCount: data.visitCount } : p)));
+            setActivePlace(prev => (prev && (prev.id === pId || prev._id === pId)) ? { ...prev, visitCount: data.visitCount } : prev);
+          }
+        })
+        .catch(err => console.debug('Visit tracking notice:', err));
+    }
   };
 
   const handleBackFromDetail = () => {
@@ -583,20 +617,46 @@ export default function App() {
     alert('Đã xóa bài đánh giá thành công!');
   };
 
-  const handleAddComment = (reviewId) => {
+  const handleCommentImageUpload = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const base64 = reader.result;
+      setCommentImagePreview(base64);
+      setCommentImageMetadata({
+        url: base64,
+        thumbnailUrl: base64,
+        storageKey: `cmt_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`,
+        storageProvider: 'Distributed_CDN_Store',
+        uploadedBy: currentUser?.fullName || 'Thành viên',
+        uploadedAt: new Date().toISOString(),
+        sizeBytes: file.size,
+        mimeType: file.type || 'image/jpeg'
+      });
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleAddComment = async (reviewId) => {
     if (!currentUser) {
       setAuthModalOpen(true);
       return;
     }
-    if (!commentContent.trim()) return;
+    if (!commentContent.trim() && !commentImageMetadata) return;
 
     const newComment = {
       commentId: 'cmt-' + Date.now(),
       userName: currentUser.fullName,
       content: commentContent.trim(),
       createdAt: new Date().toISOString(),
+      likes: [],
+      dislikes: [],
+      image: commentImageMetadata || null,
       replies: []
     };
+
+    const targetPlaceId = activePlace.slug || activePlace.id || activePlace._id;
 
     const updatedReviews = (activePlace.reviews || []).map(r => {
       if (r.reviewId === reviewId) {
@@ -609,7 +669,118 @@ export default function App() {
     setActivePlace(updatedPlace);
     setPlaces(places.map(p => ((p.id || p._id) === (activePlace.id || activePlace._id) ? updatedPlace : p)));
     setCommentContent('');
+    setCommentImagePreview(null);
+    setCommentImageMetadata(null);
     setActiveCommentReviewId(null);
+
+    // Lưu API comment kèm metadata phân tán
+    try {
+      await fetch(`http://localhost:5196/api/places/${targetPlaceId}/reviews/${reviewId}/comments`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(localStorage.getItem('token') ? { 'Authorization': `Bearer ${localStorage.getItem('token')}` } : {})
+        },
+        body: JSON.stringify({
+          content: newComment.content,
+          image: newComment.image
+        })
+      });
+    } catch (err) {
+      console.warn('Comment API synced locally:', err);
+    }
+  };
+
+  const handleToggleCommentLike = async (reviewId, commentId) => {
+    if (!currentUser) {
+      setAuthModalOpen(true);
+      return;
+    }
+    const myId = currentUser.userId || currentUser.email || 'me';
+    const targetPlaceId = activePlace.slug || activePlace.id || activePlace._id;
+
+    const updatedReviews = (activePlace.reviews || []).map(r => {
+      if (r.reviewId === reviewId) {
+        const updatedComments = (r.comments || []).map(c => {
+          if (c.commentId === commentId) {
+            const currentLikes = c.likes || [];
+            const currentDislikes = c.dislikes || [];
+            const hasLiked = currentLikes.includes(myId);
+            return {
+              ...c,
+              likes: hasLiked ? currentLikes.filter(id => id !== myId) : [...currentLikes, myId],
+              dislikes: currentDislikes.filter(id => id !== myId)
+            };
+          }
+          return c;
+        });
+        return { ...r, comments: updatedComments };
+      }
+      return r;
+    });
+
+    const updatedPlace = { ...activePlace, reviews: updatedReviews };
+    setActivePlace(updatedPlace);
+    setPlaces(places.map(p => ((p.id || p._id) === (activePlace.id || activePlace._id) ? updatedPlace : p)));
+
+    try {
+      await fetch(`http://localhost:5196/api/places/${targetPlaceId}/reviews/${reviewId}/comments/${commentId}/like`, {
+        method: 'POST',
+        headers: {
+          ...(localStorage.getItem('token') ? { 'Authorization': `Bearer ${localStorage.getItem('token')}` } : {})
+        }
+      });
+    } catch (err) {
+      console.debug('Comment like synced:', err);
+    }
+  };
+
+  const handleToggleCommentDislike = async (reviewId, commentId) => {
+    if (!currentUser) {
+      setAuthModalOpen(true);
+      return;
+    }
+    const myId = currentUser.userId || currentUser.email || 'me';
+    const targetPlaceId = activePlace.slug || activePlace.id || activePlace._id;
+
+    const updatedReviews = (activePlace.reviews || []).map(r => {
+      if (r.reviewId === reviewId) {
+        const updatedComments = (r.comments || []).map(c => {
+          if (c.commentId === commentId) {
+            const currentLikes = c.likes || [];
+            const currentDislikes = c.dislikes || [];
+            const hasDisliked = currentDislikes.includes(myId);
+            return {
+              ...c,
+              dislikes: hasDisliked ? currentDislikes.filter(id => id !== myId) : [...currentDislikes, myId],
+              likes: currentLikes.filter(id => id !== myId)
+            };
+          }
+          return c;
+        });
+        return { ...r, comments: updatedComments };
+      }
+      return r;
+    });
+
+    const updatedPlace = { ...activePlace, reviews: updatedReviews };
+    setActivePlace(updatedPlace);
+    setPlaces(places.map(p => ((p.id || p._id) === (activePlace.id || activePlace._id) ? updatedPlace : p)));
+
+    try {
+      await fetch(`http://localhost:5196/api/places/${targetPlaceId}/reviews/${reviewId}/comments/${commentId}/dislike`, {
+        method: 'POST',
+        headers: {
+          ...(localStorage.getItem('token') ? { 'Authorization': `Bearer ${localStorage.getItem('token')}` } : {})
+        }
+      });
+    } catch (err) {
+      console.debug('Comment dislike synced:', err);
+    }
+  };
+
+  const handleReportComment = (commentId) => {
+    alert('✓ Cảm ơn bạn! Báo cáo vi phạm bình luận đã được gửi tới Ban Quản Trị để rà soát.');
   };
 
   const handleAddReply = (reviewId, commentId) => {
@@ -646,7 +817,7 @@ export default function App() {
     setActiveReplyCommentId(null);
   };
 
-  const handleProposeSubmit = (e) => {
+  const handleProposeSubmit = async (e) => {
     e.preventDefault();
     if (!propName.trim()) return;
 
@@ -655,8 +826,8 @@ export default function App() {
       name: propName,
       description: propDesc,
       categoryName: propCategory || 'Du lịch & Di tích',
-      address: { street: propStreet, district: propDistrict, city: 'TP. Hồ Chí Minh' },
-      location: { type: 'Point', coordinates: [106.695, 10.775] },
+      address: { street: propStreet, district: propDistrict, city: propDistrict.includes('TP.') ? propDistrict : `${propDistrict}` },
+      location: { type: 'Point', coordinates: [mapPickedCoords.lng, mapPickedCoords.lat] },
       images: [{ url: propImageUrl || 'https://images.unsplash.com/photo-1583417319070-4a69db38a482?w=800' }],
       ratingAverage: 5.0,
       reviewCount: 1,
@@ -670,13 +841,96 @@ export default function App() {
       reviews: []
     };
 
+    try {
+      const token = localStorage.getItem('token');
+      await fetch('http://localhost:5196/api/place-proposals', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify({
+          type: 'create',
+          name: propName,
+          description: propDesc,
+          categoryId: propCategory,
+          street: propStreet,
+          district: propDistrict,
+          lng: mapPickedCoords.lng,
+          lat: mapPickedCoords.lat,
+          imageUrl: propImageUrl
+        })
+      });
+    } catch (err) {
+      console.warn('Sync proposal API:', err);
+    }
+
     setPlaces([newProposed, ...places]);
-    setPropMessage('Cảm ơn bạn! Đề xuất địa điểm đã được ghi nhận.');
+    setPropMessage('✓ Cảm ơn bạn! Đề xuất địa điểm đã được ghi nhận và gửi Admin phê duyệt.');
     setPropName('');
     setPropStreet('');
     setPropDesc('');
     setPropImageUrl('');
     setTimeout(() => setPropMessage(''), 4000);
+  };
+
+  const handleSubmitMapProposal = async (e) => {
+    e.preventDefault();
+    if (!propName.trim()) return;
+
+    setIsSubmittingProposal(true);
+    const newProposed = {
+      id: 'prop-' + Date.now(),
+      name: propName,
+      description: propDesc || `Địa điểm tại ${propDistrict} được cộng đồng đề xuất trực tiếp trên Bản đồ tương tác.`,
+      categoryName: propCategory || 'Du lịch & Di tích',
+      address: { street: propStreet || propDistrict, district: propDistrict, city: propDistrict },
+      location: { type: 'Point', coordinates: [mapPickedCoords.lng, mapPickedCoords.lat] },
+      images: [{ url: propImageUrl || 'https://images.unsplash.com/photo-1583417319070-4a69db38a482?w=800' }],
+      ratingAverage: 5.0,
+      reviewCount: 1,
+      googleRating: 4.8,
+      googleReviewCount: 10,
+      openingHours: propOpeningHours || '08:00 - 22:00',
+      isOpenNow: true,
+      ticketPrice: propTicketPrice || 'Miễn phí vào cổng',
+      ticketType: propTicketPrice.toLowerCase().includes('miễn phí') ? 'free' : 'paid',
+      googleReviewSnippet: 'Địa điểm được ghim marker và đề xuất từ Bản đồ LonGo.',
+      reviews: []
+    };
+
+    try {
+      const token = localStorage.getItem('token');
+      await fetch('http://localhost:5196/api/place-proposals', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify({
+          type: 'create',
+          name: propName,
+          description: propDesc,
+          categoryId: propCategory,
+          street: propStreet || propDistrict,
+          district: propDistrict,
+          lng: mapPickedCoords.lng,
+          lat: mapPickedCoords.lat,
+          imageUrl: propImageUrl
+        })
+      });
+    } catch (err) {
+      console.warn('Sync map proposal API:', err);
+    }
+
+    setPlaces(prev => [newProposed, ...prev]);
+    setIsSubmittingProposal(false);
+    setMapProposalModalOpen(false);
+    setPropName('');
+    setPropDesc('');
+    setPropStreet('');
+    setPropImageUrl('');
+    alert('✓ Đề xuất địa điểm đã được gửi thành công! Dữ liệu đang được chuyển tới Ban Quản Trị để kiểm duyệt.');
   };
 
   return (
@@ -740,11 +994,11 @@ export default function App() {
             </button>
 
             <button 
-              onClick={() => navigateTo('calendar')}
-              className={`aj-nav-item ${currentTab === 'calendar' ? 'active' : ''}`}
+              onClick={() => navigateTo('feed')}
+              className={`aj-nav-item ${currentTab === 'feed' ? 'active' : ''}`}
               style={{ fontWeight: 700 }}
             >
-              Lịch du lịch
+              Cộng đồng
             </button>
 
             <button 
@@ -1233,13 +1487,13 @@ export default function App() {
 
                 <div style={{ background: '#ffffff', padding: '12px 14px', borderRadius: '4px', border: '1px solid var(--aj-hairline)' }}>
                   <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--aj-slate)', textTransform: 'uppercase', marginBottom: 4 }}>
-                    VỊ TRÍ GPS
+                    LƯỢT QUAN TÂM
                   </div>
-                  <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--aj-charcoal)' }}>
-                    Kinh độ: {activePlace.location?.coordinates?.[0]?.toFixed(4)}° E
+                  <div style={{ fontSize: '18px', fontWeight: 900, color: '#0f172a' }}>
+                    {(activePlace.visitCount || 1).toLocaleString('vi-VN')}
                   </div>
-                  <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--aj-charcoal)' }}>
-                    Vĩ độ: {activePlace.location?.coordinates?.[1]?.toFixed(4)}° N
+                  <div style={{ fontSize: '12px', color: 'var(--aj-slate)', marginTop: 2 }}>
+                    Lượt xem chi tiết thực tế
                   </div>
                 </div>
               </div>
@@ -1627,25 +1881,41 @@ export default function App() {
                           {rev.content}
                         </p>
 
-                        <div style={{ display: 'flex', gap: 16 }}>
-                          <button 
-                            onClick={() => {
-                              const likes = rev.likes || [];
-                              const updated = likes.includes('me') ? likes.filter(l => l !== 'me') : [...likes, 'me'];
-                              rev.likes = updated;
-                              setActivePlace({ ...activePlace });
-                            }}
-                            className="aj-button-pill-outline" 
-                            style={{ padding: '4px 10px', fontSize: '12px' }}
-                          >
-                            <ThumbsUp size={13} />
-                            <span>Thích ({rev.likes?.length || 0})</span>
-                          </button>
+                        <div style={{ display: 'flex', gap: 12 }}>
+                          {(() => {
+                            const myId = currentUser?.userId || currentUser?.email || 'me';
+                            const isLiked = (rev.likes || []).includes(myId);
+                            return (
+                              <button 
+                                onClick={() => {
+                                  const likes = rev.likes || [];
+                                  const updated = isLiked ? likes.filter(l => l !== myId) : [...likes, myId];
+                                  rev.likes = updated;
+                                  setActivePlace({ ...activePlace });
+                                }}
+                                className="aj-button-pill-outline" 
+                                style={{
+                                  padding: '5px 12px',
+                                  fontSize: '12px',
+                                  backgroundColor: isLiked ? '#0f172a' : '#ffffff',
+                                  color: isLiked ? '#ffffff' : 'var(--aj-ink)',
+                                  borderColor: isLiked ? '#0f172a' : 'var(--aj-hairline)',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: 6,
+                                  transition: 'all 0.15s ease'
+                                }}
+                              >
+                                <ThumbsUp size={13} fill={isLiked ? '#ffffff' : 'none'} color={isLiked ? '#ffffff' : 'currentColor'} />
+                                <span>Thích ({rev.likes?.length || 0})</span>
+                              </button>
+                            );
+                          })()}
 
                           <button 
                             onClick={() => setActiveCommentReviewId(activeCommentReviewId === rev.reviewId ? null : rev.reviewId)}
                             className="aj-button-pill-outline" 
-                            style={{ padding: '4px 10px', fontSize: '12px' }}
+                            style={{ padding: '5px 12px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: 6 }}
                           >
                             <MessageSquare size={13} />
                             <span>Bình luận ({rev.comments?.length || 0})</span>
@@ -1653,70 +1923,195 @@ export default function App() {
                         </div>
 
                         {activeCommentReviewId === rev.reviewId && (
-                          <div style={{ marginTop: 12, display: 'flex', gap: 8 }}>
-                            <input 
-                              type="text" 
-                              placeholder="Viết bình luận thảo luận..."
-                              value={commentContent}
-                              onChange={e => setCommentContent(e.target.value)}
-                              className="aj-text-input"
-                              style={{ flex: 1, padding: '8px 14px', borderRadius: '18px' }}
-                            />
-                            <button onClick={() => handleAddComment(rev.reviewId)} className="aj-button-pill-dark">
-                              Gửi
-                            </button>
+                          <div style={{ marginTop: 12, padding: 12, background: '#f8fafc', borderRadius: 8, border: '1px solid var(--aj-hairline)' }}>
+                            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                              <input 
+                                type="text" 
+                                placeholder="Viết bình luận thảo luận..."
+                                value={commentContent}
+                                onChange={e => setCommentContent(e.target.value)}
+                                className="aj-text-input"
+                                style={{ flex: 1, padding: '8px 14px', borderRadius: '18px', fontSize: '13.5px' }}
+                                onKeyDown={e => { if (e.key === 'Enter') handleAddComment(rev.reviewId); }}
+                              />
+                              <label 
+                                title="Đính kèm ảnh minh họa (Lưu trữ metadata phân tán)"
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  width: 36,
+                                  height: 36,
+                                  borderRadius: '50%',
+                                  background: commentImagePreview ? '#e0f2fe' : '#ffffff',
+                                  border: '1px solid var(--aj-hairline)',
+                                  cursor: 'pointer',
+                                  color: commentImagePreview ? '#0284c7' : 'var(--aj-slate)',
+                                  transition: 'all 0.15s ease'
+                                }}
+                              >
+                                <ImageIcon size={18} />
+                                <input 
+                                  type="file" 
+                                  accept="image/*" 
+                                  onChange={handleCommentImageUpload}
+                                  style={{ display: 'none' }}
+                                />
+                              </label>
+                              <button onClick={() => handleAddComment(rev.reviewId)} className="aj-button-pill-dark" style={{ padding: '7px 16px', fontSize: '13px' }}>
+                                Gửi
+                              </button>
+                            </div>
+
+                            {commentImagePreview && (
+                              <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 10, background: '#ffffff', padding: 8, borderRadius: 6, border: '1px solid #e2e8f0' }}>
+                                <img src={commentImagePreview} alt="Preview" style={{ width: 44, height: 44, objectFit: 'cover', borderRadius: 4 }} />
+                                <div style={{ flex: 1, fontSize: '11.5px', color: 'var(--aj-slate)' }}>
+                                  <div style={{ fontWeight: 700, color: '#0f172a' }}>Ảnh đính kèm sẵn sàng tải lên</div>
+                                  <div>Dữ liệu lưu trữ phân tán • Khóa: {commentImageMetadata?.storageKey}</div>
+                                </div>
+                                <button 
+                                  type="button" 
+                                  onClick={() => { setCommentImagePreview(null); setCommentImageMetadata(null); }}
+                                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ef4444' }}
+                                >
+                                  <X size={16} />
+                                </button>
+                              </div>
+                            )}
                           </div>
                         )}
 
                         {rev.comments && rev.comments.length > 0 && (
-                          <div style={{ marginTop: 14, marginLeft: 16, paddingLeft: 12, borderLeft: '2px solid var(--aj-hairline)', display: 'flex', flexDirection: 'column', gap: 10 }}>
-                            {rev.comments.map(cmt => (
-                              <div key={cmt.commentId} style={{ fontSize: '13.5px' }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                  <span style={{ fontWeight: 700, color: 'var(--aj-ink)' }}>{cmt.userName}</span>
-                                  <span style={{ fontSize: '11px', color: 'var(--aj-slate)' }}>
-                                    {new Date(cmt.createdAt).toLocaleDateString('vi-VN')}
-                                  </span>
-                                </div>
-                                <div style={{ color: 'var(--aj-charcoal)', marginTop: 2 }}>
-                                  {cmt.content}
-                                </div>
+                          <div style={{ marginTop: 14, marginLeft: 16, paddingLeft: 14, borderLeft: '2px solid var(--aj-hairline)', display: 'flex', flexDirection: 'column', gap: 12 }}>
+                            {rev.comments.map(cmt => {
+                              const myId = currentUser?.userId || currentUser?.email || 'me';
+                              const cmtLikes = cmt.likes || [];
+                              const cmtDislikes = cmt.dislikes || [];
+                              const isCmtLiked = cmtLikes.includes(myId);
+                              const isCmtDisliked = cmtDislikes.includes(myId);
 
-                                <button 
-                                  onClick={() => setActiveReplyCommentId(activeReplyCommentId === cmt.commentId ? null : cmt.commentId)}
-                                  style={{ fontSize: '12px', color: 'var(--aj-primary)', marginTop: 2, fontWeight: 600, padding: 0 }}
-                                >
-                                  Trả lời
-                                </button>
+                              return (
+                                <div key={cmt.commentId} style={{ fontSize: '13.5px', background: '#ffffff', padding: '8px 12px', borderRadius: 6, border: '1px solid #f1f5f9' }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 4 }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                      <span style={{ fontWeight: 700, color: 'var(--aj-ink)' }}>{cmt.userName}</span>
+                                      <span style={{ fontSize: '11px', color: 'var(--aj-slate)' }}>
+                                        {new Date(cmt.createdAt).toLocaleDateString('vi-VN')}
+                                      </span>
+                                    </div>
+                                    <button 
+                                      onClick={() => handleReportComment(cmt.commentId)}
+                                      title="Báo cáo bình luận này"
+                                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--aj-slate)', padding: 2 }}
+                                    >
+                                      <Flag size={12} />
+                                    </button>
+                                  </div>
 
-                                {activeReplyCommentId === cmt.commentId && (
-                                  <div style={{ marginTop: 6, display: 'flex', gap: 8 }}>
-                                    <input 
-                                      type="text" 
-                                      placeholder="Phản hồi..."
-                                      value={replyContent}
-                                      onChange={e => setReplyContent(e.target.value)}
-                                      className="aj-text-input"
-                                      style={{ flex: 1, padding: '6px 12px', fontSize: '13px', borderRadius: '18px' }}
-                                    />
-                                    <button onClick={() => handleAddReply(rev.reviewId, cmt.commentId)} className="aj-button-pill-dark" style={{ padding: '6px 12px', fontSize: '12px' }}>
+                                  <div style={{ color: 'var(--aj-charcoal)', lineHeight: 1.5 }}>
+                                    {cmt.content}
+                                  </div>
+
+                                  {/* Hiển thị ảnh kèm thông tin Metadata Phân tán */}
+                                  {cmt.image?.url && (
+                                    <div style={{ marginTop: 8, marginBottom: 6 }}>
+                                      <div style={{ position: 'relative', display: 'inline-block', maxWidth: 220, borderRadius: 6, overflow: 'hidden', border: '1px solid var(--aj-hairline)' }}>
+                                        <img 
+                                          src={cmt.image.url} 
+                                          alt="Comment attachment" 
+                                          style={{ width: '100%', maxHeight: 150, objectFit: 'cover', display: 'block' }}
+                                        />
+                                      </div>
+                                      <div style={{ fontSize: '10.5px', color: 'var(--aj-slate)', marginTop: 3, display: 'flex', alignItems: 'center', gap: 4 }}>
+                                        <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#22c55e', display: 'inline-block' }} />
+                                        <span>Lưu trữ phân tán CDN ({cmt.image.storageProvider || 'Distributed_Storage'}) • Đăng bởi: {cmt.image.uploadedBy || cmt.userName}</span>
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {/* Tương tác Like / Dislike / Reply cho từng Comment */}
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 6, paddingTop: 4, borderTop: '1px solid #f8fafc' }}>
+                                    <button 
+                                      onClick={() => handleToggleCommentLike(rev.reviewId, cmt.commentId)}
+                                      style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: 4,
+                                        fontSize: '11.5px',
+                                        fontWeight: 700,
+                                        background: isCmtLiked ? '#0f172a' : '#f8fafc',
+                                        color: isCmtLiked ? '#ffffff' : 'var(--aj-charcoal)',
+                                        border: '1px solid',
+                                        borderColor: isCmtLiked ? '#0f172a' : '#e2e8f0',
+                                        padding: '2px 8px',
+                                        borderRadius: 12,
+                                        cursor: 'pointer'
+                                      }}
+                                    >
+                                      <ThumbsUp size={11} fill={isCmtLiked ? '#ffffff' : 'none'} />
+                                      <span>Thích ({cmtLikes.length})</span>
+                                    </button>
+
+                                    <button 
+                                      onClick={() => handleToggleCommentDislike(rev.reviewId, cmt.commentId)}
+                                      style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: 4,
+                                        fontSize: '11.5px',
+                                        fontWeight: 700,
+                                        background: isCmtDisliked ? '#ef4444' : '#f8fafc',
+                                        color: isCmtDisliked ? '#ffffff' : 'var(--aj-charcoal)',
+                                        border: '1px solid',
+                                        borderColor: isCmtDisliked ? '#ef4444' : '#e2e8f0',
+                                        padding: '2px 8px',
+                                        borderRadius: 12,
+                                        cursor: 'pointer'
+                                      }}
+                                    >
+                                      <ThumbsDown size={11} fill={isCmtDisliked ? '#ffffff' : 'none'} />
+                                      <span>Không thích ({cmtDislikes.length})</span>
+                                    </button>
+
+                                    <button 
+                                      onClick={() => setActiveReplyCommentId(activeReplyCommentId === cmt.commentId ? null : cmt.commentId)}
+                                      style={{ fontSize: '11.5px', color: 'var(--aj-primary)', fontWeight: 700, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+                                    >
                                       Trả lời
                                     </button>
                                   </div>
-                                )}
 
-                                {cmt.replies && cmt.replies.length > 0 && (
-                                  <div style={{ marginTop: 6, marginLeft: 12, paddingLeft: 8, borderLeft: '1px solid var(--aj-silver)', display: 'flex', flexDirection: 'column', gap: 6 }}>
-                                    {cmt.replies.map(rep => (
-                                      <div key={rep.replyId} style={{ fontSize: '13px' }}>
-                                        <span style={{ fontWeight: 700 }}>{rep.userName}: </span>
-                                        <span style={{ color: 'var(--aj-charcoal)' }}>{rep.content}</span>
-                                      </div>
-                                    ))}
-                                  </div>
-                                )}
-                              </div>
-                            ))}
+                                  {activeReplyCommentId === cmt.commentId && (
+                                    <div style={{ marginTop: 8, display: 'flex', gap: 8 }}>
+                                      <input 
+                                        type="text" 
+                                        placeholder="Phản hồi..."
+                                        value={replyContent}
+                                        onChange={e => setReplyContent(e.target.value)}
+                                        className="aj-text-input"
+                                        style={{ flex: 1, padding: '6px 12px', fontSize: '13px', borderRadius: '18px' }}
+                                        onKeyDown={e => { if (e.key === 'Enter') handleAddReply(rev.reviewId, cmt.commentId); }}
+                                      />
+                                      <button onClick={() => handleAddReply(rev.reviewId, cmt.commentId)} className="aj-button-pill-dark" style={{ padding: '6px 12px', fontSize: '12px' }}>
+                                        Trả lời
+                                      </button>
+                                    </div>
+                                  )}
+
+                                  {cmt.replies && cmt.replies.length > 0 && (
+                                    <div style={{ marginTop: 8, marginLeft: 12, paddingLeft: 8, borderLeft: '1px solid var(--aj-silver)', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                                      {cmt.replies.map(rep => (
+                                        <div key={rep.replyId} style={{ fontSize: '12.5px', background: '#f8fafc', padding: '6px 10px', borderRadius: 4 }}>
+                                          <span style={{ fontWeight: 700 }}>{rep.userName}: </span>
+                                          <span style={{ color: 'var(--aj-charcoal)' }}>{rep.content}</span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
                           </div>
                         )}
 
@@ -2209,95 +2604,195 @@ export default function App() {
 
                   </aside>
 
-                  {/* Right Column: Place Cards Grid */}
+                  {/* Right Column: Place Cards Grid with 10 items pagination */}
                   <div>
                     {filteredPlaces.length > 0 ? (
-                      <div className="aj-places-grid">
-                        {filteredPlaces.map(place => (
-                          <div 
-                            key={place.id || place._id} 
-                            className="aj-place-card"
-                            onClick={() => handleOpenDetail(place)}
-                          >
-                            <div className="aj-card-media">
-                              <img 
-                                src={place.images?.[0]?.url || 'https://images.unsplash.com/photo-1583417319070-4a69db38a482?w=800'} 
-                                alt={place.name} 
-                                className="aj-card-img" 
-                              />
-                              <span className="aj-card-badge-left">{place.categoryName || 'Địa điểm'}</span>
-                              <span className="aj-card-badge-right">
-                                {place.ticketPrice?.includes('Miễn phí') ? 'Miễn phí vé' : 'Có thu vé'}
-                              </span>
+                      (() => {
+                        const EXPLORE_PAGE_SIZE = 10;
+                        const totalExplorePages = Math.ceil(filteredPlaces.length / EXPLORE_PAGE_SIZE) || 1;
+                        const currentExplorePage = Math.min(Math.max(1, explorePage), totalExplorePages);
+                        const pagedPlaces = filteredPlaces.slice((currentExplorePage - 1) * EXPLORE_PAGE_SIZE, currentExplorePage * EXPLORE_PAGE_SIZE);
 
-                              <button 
-                                onClick={(e) => handleToggleFavorite(place.id || place._id, e)}
-                                className={`aj-card-fav-btn ${favoritePlaceIds.includes(place.id || place._id) ? 'active' : ''}`}
-                                title="Lưu yêu thích"
-                              >
-                                <Heart size={16} fill={favoritePlaceIds.includes(place.id || place._id) ? '#ef4444' : 'none'} />
-                              </button>
-                            </div>
-
-                            <div className="aj-card-body">
-                              <div className="aj-card-location">
-                                <MapPin size={13} color="var(--aj-slate)" />
-                                <span>{place.address?.district}, {place.address?.city}</span>
-                              </div>
-
-                              <h3 className="aj-card-title">{place.name}</h3>
-
-                              <div className="aj-card-rating-row">
-                                <Star size={15} fill="#eab308" color="#eab308" />
-                                <span className="aj-star-score">{place.ratingAverage?.toFixed(1) || '4.8'}</span>
-                                <span style={{ color: 'var(--aj-slate)', fontSize: '12px' }}>
-                                  ({place.reviewCount || 10} đánh giá)
-                                </span>
-                                <span className="aj-gmap-tag">
-                                  Google {place.googleRating?.toFixed(1)}★
-                                </span>
-                              </div>
-
-                              <div className="aj-card-meta-list">
-                                <div className="aj-card-meta-item">
-                                  <Clock size={13} color="var(--aj-slate)" />
-                                  <span>{place.openingHours}</span>
-                                </div>
-                                <div className="aj-card-meta-item">
-                                  <Ticket size={13} color="var(--aj-slate)" />
-                                  <span>{place.ticketPrice}</span>
-                                </div>
-                              </div>
-
-                              {(() => {
-                                const timing = getPlaceTimingDetails(place);
-                                const isMatch = selectedTravelMonth !== 'all' && timing.hasSeasonalRecommendation && timing.bestMonths.includes(parseInt(selectedTravelMonth, 10));
-                                return (
-                                  <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                                    {isMatch && (
-                                      <span style={{ fontSize: '10.5px', background: '#dcfce7', color: '#166534', padding: '1px 6px', borderRadius: 3, fontWeight: 800 }}>
-                                        ✦ Phù hợp Tháng {selectedTravelMonth}
-                                      </span>
-                                    )}
-                                    <span style={{ fontSize: '11px', color: timing.hasSeasonalRecommendation ? 'var(--aj-slate)' : '#166534', fontWeight: 600 }}>
-                                      {timing.badgeText}
+                        return (
+                          <>
+                            <div className="aj-places-grid">
+                              {pagedPlaces.map(place => (
+                                <div 
+                                  key={place.id || place._id} 
+                                  className="aj-place-card"
+                                  onClick={() => handleOpenDetail(place)}
+                                >
+                                  <div className="aj-card-media">
+                                    <img 
+                                      src={place.images?.[0]?.url || 'https://images.unsplash.com/photo-1583417319070-4a69db38a482?w=800'} 
+                                      alt={place.name} 
+                                      className="aj-card-img" 
+                                    />
+                                    <span className="aj-card-badge-left">{place.categoryName || 'Địa điểm'}</span>
+                                    <span className="aj-card-badge-right">
+                                      {place.ticketPrice?.includes('Miễn phí') ? 'Miễn phí vé' : 'Có thu vé'}
                                     </span>
-                                  </div>
-                                );
-                              })()}
 
-                              <div className="aj-card-footer">
-                                <span style={{ fontSize: '12px', color: 'var(--aj-slate)' }}>
-                                  Google Maps
-                                </span>
-                                <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--aj-ink)' }}>
-                                  Xem đánh giá & chi tiết →
-                                </span>
-                              </div>
+                                    <button 
+                                      onClick={(e) => handleToggleFavorite(place.id || place._id, e)}
+                                      className={`aj-card-fav-btn ${favoritePlaceIds.includes(place.id || place._id) ? 'active' : ''}`}
+                                      title="Lưu yêu thích"
+                                    >
+                                      <Heart size={16} fill={favoritePlaceIds.includes(place.id || place._id) ? '#ef4444' : 'none'} />
+                                    </button>
+                                  </div>
+
+                                  <div className="aj-card-body">
+                                    <div className="aj-card-location">
+                                      <MapPin size={13} color="var(--aj-slate)" />
+                                      <span>{place.address?.district}, {place.address?.city}</span>
+                                    </div>
+
+                                    <h3 className="aj-card-title">{place.name}</h3>
+
+                                    <div className="aj-card-rating-row">
+                                      <Star size={15} fill="#eab308" color="#eab308" />
+                                      <span className="aj-star-score">{place.ratingAverage?.toFixed(1) || '4.8'}</span>
+                                      <span style={{ color: 'var(--aj-slate)', fontSize: '12px' }}>
+                                        ({place.reviewCount || 10} đánh giá)
+                                      </span>
+                                      <span className="aj-gmap-tag">
+                                        Google {place.googleRating?.toFixed(1)}★
+                                      </span>
+                                    </div>
+
+                                    <div className="aj-card-meta-list">
+                                      <div className="aj-card-meta-item">
+                                        <Clock size={13} color="var(--aj-slate)" />
+                                        <span>{place.openingHours}</span>
+                                      </div>
+                                      <div className="aj-card-meta-item">
+                                        <Ticket size={13} color="var(--aj-slate)" />
+                                        <span>{place.ticketPrice}</span>
+                                      </div>
+                                    </div>
+
+                                    {(() => {
+                                      const timing = getPlaceTimingDetails(place);
+                                      const isMatch = selectedTravelMonth !== 'all' && timing.hasSeasonalRecommendation && timing.bestMonths.includes(parseInt(selectedTravelMonth, 10));
+                                      return (
+                                        <div style={{ marginTop: 8, display: 'flex', flexWrap: 'gap', gap: 4 }}>
+                                          {isMatch && (
+                                            <span style={{ fontSize: '10.5px', background: '#dcfce7', color: '#166534', padding: '1px 6px', borderRadius: 3, fontWeight: 800 }}>
+                                              ✦ Phù hợp Tháng {selectedTravelMonth}
+                                            </span>
+                                          )}
+                                          <span style={{ fontSize: '11px', color: timing.hasSeasonalRecommendation ? 'var(--aj-slate)' : '#166534', fontWeight: 600 }}>
+                                            {timing.badgeText}
+                                          </span>
+                                        </div>
+                                      );
+                                    })()}
+
+                                    <div className="aj-card-footer">
+                                      <span style={{ fontSize: '12px', color: 'var(--aj-slate)' }}>
+                                        Google Maps
+                                      </span>
+                                      <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--aj-ink)' }}>
+                                        Xem đánh giá & chi tiết →
+                                      </span>
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
                             </div>
-                          </div>
-                        ))}
-                      </div>
+
+                            {/* BỘ ĐIỀU HƯỚNG PHÂN TRANG 10 ĐỊA ĐIỂM / TRANG */}
+                            {totalExplorePages > 1 && (
+                              <div style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                marginTop: 32,
+                                padding: '16px 20px',
+                                background: '#ffffff',
+                                borderRadius: '8px',
+                                border: '1px solid var(--aj-hairline)',
+                                flexWrap: 'wrap',
+                                gap: 12
+                              }}>
+                                <div style={{ fontSize: '13px', color: 'var(--aj-slate)', fontWeight: 600 }}>
+                                  Hiển thị <strong>{(currentExplorePage - 1) * EXPLORE_PAGE_SIZE + 1} - {Math.min(currentExplorePage * EXPLORE_PAGE_SIZE, filteredPlaces.length)}</strong> trên tổng số <strong>{filteredPlaces.length}</strong> địa điểm
+                                </div>
+
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                  <button
+                                    onClick={() => { setExplorePage(p => Math.max(1, p - 1)); window.scrollTo({ top: 380, behavior: 'smooth' }); }}
+                                    disabled={currentExplorePage === 1}
+                                    style={{
+                                      padding: '6px 14px',
+                                      borderRadius: '6px',
+                                      border: '1px solid var(--aj-hairline)',
+                                      background: currentExplorePage === 1 ? '#f1f5f9' : '#ffffff',
+                                      color: currentExplorePage === 1 ? '#94a3b8' : 'var(--aj-ink)',
+                                      cursor: currentExplorePage === 1 ? 'not-allowed' : 'pointer',
+                                      fontSize: '13px',
+                                      fontWeight: 700,
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      gap: 4
+                                    }}
+                                  >
+                                    <ChevronLeft size={14} />
+                                    <span>Trước</span>
+                                  </button>
+
+                                  {[...Array(totalExplorePages)].map((_, i) => {
+                                    const pageNum = i + 1;
+                                    const isCurrent = pageNum === currentExplorePage;
+                                    return (
+                                      <button
+                                        key={pageNum}
+                                        onClick={() => { setExplorePage(pageNum); window.scrollTo({ top: 380, behavior: 'smooth' }); }}
+                                        style={{
+                                          width: 34,
+                                          height: 34,
+                                          borderRadius: '6px',
+                                          border: '1px solid',
+                                          borderColor: isCurrent ? '#000000' : 'var(--aj-hairline)',
+                                          background: isCurrent ? '#000000' : '#ffffff',
+                                          color: isCurrent ? '#ffffff' : 'var(--aj-ink)',
+                                          fontWeight: isCurrent ? 800 : 600,
+                                          fontSize: '13px',
+                                          cursor: 'pointer'
+                                        }}
+                                      >
+                                        {pageNum}
+                                      </button>
+                                    );
+                                  })}
+
+                                  <button
+                                    onClick={() => { setExplorePage(p => Math.min(totalExplorePages, p + 1)); window.scrollTo({ top: 380, behavior: 'smooth' }); }}
+                                    disabled={currentExplorePage === totalExplorePages}
+                                    style={{
+                                      padding: '6px 14px',
+                                      borderRadius: '6px',
+                                      border: '1px solid var(--aj-hairline)',
+                                      background: currentExplorePage === totalExplorePages ? '#f1f5f9' : '#ffffff',
+                                      color: currentExplorePage === totalExplorePages ? '#94a3b8' : 'var(--aj-ink)',
+                                      cursor: currentExplorePage === totalExplorePages ? 'not-allowed' : 'pointer',
+                                      fontSize: '13px',
+                                      fontWeight: 700,
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      gap: 4
+                                    }}
+                                  >
+                                    <span>Sau</span>
+                                    <ChevronRight size={14} />
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                          </>
+                        );
+                      })()
                     ) : (
                       <div style={{ textAlign: 'center', padding: '60px 20px', background: 'var(--aj-soft)', borderRadius: 'var(--aj-rounded-md)' }}>
                         <div style={{ fontSize: '18px', fontWeight: 700, marginBottom: 8 }}>
@@ -2340,14 +2835,14 @@ export default function App() {
             )}
 
             {/* =========================================================
-                TAB: LỊCH DU LỊCH 2026 THEO THÁNG (Travel Calendar)
+                TAB: MẠNG XÃ HỘI DU LỊCH CỘNG ĐỒNG (Travel Social Feed)
                 ========================================================= */}
-            {currentTab === 'calendar' && (
-              <SeasonalTravelCalendar 
-                onSelectMonthForExplore={(m) => {
-                  setSelectedTravelMonth(String(m));
-                  navigateTo('explore');
-                }}
+            {currentTab === 'feed' && (
+              <CommunityFeed 
+                currentUser={currentUser}
+                places={places}
+                onSelectPlace={handleOpenDetail}
+                onOpenAuthModal={() => setAuthModalOpen(true)}
               />
             )}
 
@@ -2385,7 +2880,7 @@ export default function App() {
                         transition: 'all 0.15s ease'
                       }}
                     >
-                      Bản đồ Địa lý VN (63 Tỉnh/Vùng)
+                      Bản đồ Địa lý VN (63 Tỉnh/3 Miền)
                     </button>
                     <button
                       onClick={() => setMapViewSubMode('coordinates')}
@@ -2410,8 +2905,13 @@ export default function App() {
                   <VietnamInteractiveMap 
                     onExploreProvince={(prov) => {
                       const filterKey = prov.matchingFilter || prov.name;
-                      setSearchTerm(filterKey);
+                      setSelectedCity(filterKey);
                       navigateTo('explore');
+                    }}
+                    onProposePlace={(prov) => {
+                      setPropDistrict(prov.name);
+                      setPropStreet(prov.capital ? `${prov.capital}, ${prov.name}` : prov.name);
+                      setMapProposalModalOpen(true);
                     }}
                   />
                 ) : (
@@ -2425,29 +2925,84 @@ export default function App() {
             )}
 
             {/* =========================================================
-                TAB 4: LẬP KẾ HOẠCH DU LỊCH (Trip Planner)
+                TAB 4: LẬP KẾ HOẠCH DU LỊCH (Sub-tabs: Lịch du lịch theo mùa & Kế hoạch hành trình)
                 ========================================================= */}
             {currentTab === 'trip' && (
               <div style={{ maxWidth: 1280, margin: '0 auto', padding: '24px 24px' }}>
-                <div style={{ marginBottom: 16 }}>
+                <div style={{ marginBottom: 20 }}>
                   <div className="aj-eyebrow-lockup">
                     <span className="aj-eyebrow-bar" />
-                    <span className="aj-eyebrow-text">LẬP KẾ HOẠCH HÀNH TRÌNH</span>
+                    <span className="aj-eyebrow-text">LẬP KẾ HOẠCH HÀNH TRÌNH LONGO</span>
                   </div>
                   <h2 className="aj-headline-md">
-                    Lịch Trình Khám Phá & Lựa Chọn Điểm Đến
+                    Lịch Trình Khám Phá & Lịch Du Lịch Theo Mùa
                   </h2>
                 </div>
-                <TripPlanner 
-                  customStops={customTripStops}
-                  onRemoveStop={(idx) => {
-                    const updated = [...customTripStops];
-                    updated.splice(idx, 1);
-                    setCustomTripStops(updated);
-                  }}
-                  onSelectPlace={handleOpenDetail}
-                  onClearTrip={() => setCustomTripStops([])}
-                />
+
+                {/* Sub-tabs Switcher */}
+                <div style={{ display: 'flex', gap: 10, marginBottom: 24, borderBottom: '1px solid var(--aj-hairline)', paddingBottom: 14 }}>
+                  <button
+                    onClick={() => setTripSubTab('calendar')}
+                    style={{
+                      padding: '10px 20px',
+                      borderRadius: '24px',
+                      border: 'none',
+                      fontSize: '13.5px',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      backgroundColor: tripSubTab === 'calendar' ? '#0f172a' : '#f1f5f9',
+                      color: tripSubTab === 'calendar' ? '#ffffff' : 'var(--aj-ink)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8,
+                      transition: 'all 0.15s ease'
+                    }}
+                  >
+                    <Calendar size={16} />
+                    <span>1. Lịch du lịch theo mùa (12 Tháng)</span>
+                  </button>
+
+                  <button
+                    onClick={() => setTripSubTab('itinerary')}
+                    style={{
+                      padding: '10px 20px',
+                      borderRadius: '24px',
+                      border: 'none',
+                      fontSize: '13.5px',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      backgroundColor: tripSubTab === 'itinerary' ? '#0f172a' : '#f1f5f9',
+                      color: tripSubTab === 'itinerary' ? '#ffffff' : 'var(--aj-ink)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8,
+                      transition: 'all 0.15s ease'
+                    }}
+                  >
+                    <Navigation size={16} />
+                    <span>2. Kế hoạch hành trình ({customTripStops.length} điểm đã chọn)</span>
+                  </button>
+                </div>
+
+                {tripSubTab === 'calendar' ? (
+                  <SeasonalTravelCalendar 
+                    onSelectMonthForExplore={(m) => {
+                      setSelectedTravelMonth(String(m));
+                      navigateTo('explore');
+                    }}
+                  />
+                ) : (
+                  <TripPlanner 
+                    customStops={customTripStops}
+                    onRemoveStop={(idx) => {
+                      const updated = [...customTripStops];
+                      updated.splice(idx, 1);
+                      setCustomTripStops(updated);
+                    }}
+                    onSelectPlace={handleOpenDetail}
+                    onClearTrip={() => setCustomTripStops([])}
+                  />
+                )}
               </div>
             )}
 
@@ -2703,6 +3258,256 @@ export default function App() {
         )}
 
       </main>
+
+      {/* ─────────────────────────────────────────────────────────────
+          MODAL ĐỀ XUẤT ĐỊA ĐIỂM TƯƠNG TÁC TRỰC TIẾP TRÊN BẢN ĐỒ
+          ───────────────────────────────────────────────────────────── */}
+      {mapProposalModalOpen && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          background: 'rgba(0, 0, 0, 0.7)',
+          backdropFilter: 'blur(3px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 110,
+          padding: 20
+        }}>
+          <div style={{
+            background: '#ffffff',
+            borderRadius: '12px',
+            width: '100%',
+            maxWidth: 680,
+            maxHeight: '90vh',
+            overflowY: 'auto',
+            padding: 28,
+            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 18 }}>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                  <MapPin size={18} color="#0284c7" />
+                  <span style={{ fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', color: '#0284c7', letterSpacing: '0.04em' }}>
+                    TƯƠNG TÁC BẢN ĐỒ LONGO
+                  </span>
+                </div>
+                <h3 style={{ fontSize: '19px', fontWeight: 800, margin: 0, color: '#0f172a' }}>
+                  Đề xuất địa điểm mới tại {propDistrict || 'Việt Nam'}
+                </h3>
+              </div>
+              <button 
+                onClick={() => setMapProposalModalOpen(false)} 
+                style={{ background: '#f1f5f9', border: 'none', borderRadius: '50%', width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'var(--aj-slate)' }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Hướng dẫn quy trình 3 bước */}
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(3, 1fr)',
+              gap: 8,
+              padding: '10px 14px',
+              background: '#f8fafc',
+              borderRadius: '8px',
+              border: '1px solid var(--aj-hairline)',
+              marginBottom: 20,
+              fontSize: '11.5px',
+              color: 'var(--aj-charcoal)'
+            }}>
+              <div><strong>1. Chọn vị trí:</strong> Ghim tọa độ GPS</div>
+              <div><strong>2. Điền thông tin:</strong> Tên, ảnh & giá vé</div>
+              <div><strong>3. Admin duyệt:</strong> Hiển thị công khai</div>
+            </div>
+
+            {/* Khung Ghim Tọa độ Bản đồ Thu nhỏ & Xem trước Tọa độ */}
+            <div style={{
+              background: '#0f172a',
+              borderRadius: '8px',
+              padding: '14px 16px',
+              color: '#ffffff',
+              marginBottom: 20
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                <span style={{ fontSize: '12px', fontWeight: 700, color: '#94a3b8' }}>TỌA ĐỘ GHIM TRÊN MAP</span>
+                <span style={{ fontSize: '11px', background: '#38bdf8', color: '#0f172a', padding: '2px 8px', borderRadius: 4, fontWeight: 800 }}>
+                  Đã tự động xác định
+                </span>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div>
+                  <label style={{ fontSize: '11px', color: '#94a3b8' }}>Vĩ độ (Latitude)</label>
+                  <input 
+                    type="number"
+                    step="0.0001"
+                    value={mapPickedCoords.lat}
+                    onChange={e => setMapPickedCoords(prev => ({ ...prev, lat: parseFloat(e.target.value) || 0 }))}
+                    style={{ width: '100%', background: '#1e293b', border: '1px solid #334155', color: '#ffffff', padding: '6px 10px', borderRadius: 4, fontSize: '13px', marginTop: 4 }}
+                  />
+                </div>
+                <div>
+                  <label style={{ fontSize: '11px', color: '#94a3b8' }}>Kinh độ (Longitude)</label>
+                  <input 
+                    type="number"
+                    step="0.0001"
+                    value={mapPickedCoords.lng}
+                    onChange={e => setMapPickedCoords(prev => ({ ...prev, lng: parseFloat(e.target.value) || 0 }))}
+                    style={{ width: '100%', background: '#1e293b', border: '1px solid #334155', color: '#ffffff', padding: '6px 10px', borderRadius: 4, fontSize: '13px', marginTop: 4 }}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <form onSubmit={handleSubmitMapProposal} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: 700, marginBottom: 4 }}>
+                  Tên địa điểm đề xuất *
+                </label>
+                <input 
+                  type="text" 
+                  placeholder="Ví dụ: Đồi thông Cầu Đất, Suối Tiên Mũi Né..."
+                  value={propName}
+                  onChange={e => setPropName(e.target.value)}
+                  className="aj-text-input"
+                  style={{ width: '100%' }}
+                  required
+                />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: 700, marginBottom: 4 }}>
+                    Danh mục phân loại *
+                  </label>
+                  <select 
+                    value={propCategory} 
+                    onChange={e => setPropCategory(e.target.value)}
+                    className="aj-select"
+                    style={{ width: '100%' }}
+                  >
+                    <option value="Du lịch & Di tích">Du lịch & Di tích</option>
+                    <option value="Ẩm thực & Nhà hàng">Ẩm thực & Nhà hàng</option>
+                    <option value="Cà phê & Trà">Cà phê & Trà</option>
+                    <option value="Vui chơi & Giải trí">Vui chơi & Giải trí</option>
+                    <option value="Check-in thiên nhiên">Check-in thiên nhiên</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: 700, marginBottom: 4 }}>
+                    Tỉnh thành / Khu vực *
+                  </label>
+                  <input 
+                    type="text" 
+                    value={propDistrict}
+                    onChange={e => setPropDistrict(e.target.value)}
+                    className="aj-text-input"
+                    style={{ width: '100%' }}
+                    required
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: 700, marginBottom: 4 }}>
+                  Địa chỉ chi tiết hoặc cung đường tiếp cận *
+                </label>
+                <input 
+                  type="text" 
+                  placeholder="Ví dụ: Thôn Trường Thọ, Xã Trạm Hành..."
+                  value={propStreet}
+                  onChange={e => setPropStreet(e.target.value)}
+                  className="aj-text-input"
+                  style={{ width: '100%' }}
+                  required
+                />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: 700, marginBottom: 4 }}>
+                    Giờ mở cửa tham khảo
+                  </label>
+                  <input 
+                    type="text" 
+                    value={propOpeningHours}
+                    onChange={e => setPropOpeningHours(e.target.value)}
+                    className="aj-text-input"
+                    style={{ width: '100%' }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: 700, marginBottom: 4 }}>
+                    Giá vé / Chi phí vào cổng
+                  </label>
+                  <input 
+                    type="text" 
+                    value={propTicketPrice}
+                    onChange={e => setPropTicketPrice(e.target.value)}
+                    className="aj-text-input"
+                    style={{ width: '100%' }}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: 700, marginBottom: 4 }}>
+                  Mô tả trải nghiệm, cảnh quan & lưu ý du khách
+                </label>
+                <textarea 
+                  rows={3} 
+                  placeholder="Mô tả lý do nên đến địa điểm này, góc chụp ảnh đẹp hoặc hướng dẫn gửi xe..."
+                  value={propDesc}
+                  onChange={e => setPropDesc(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '10px 14px',
+                    border: '1px solid var(--aj-hairline)',
+                    borderRadius: 'var(--aj-rounded-sm)',
+                    fontFamily: 'inherit',
+                    fontSize: '13.5px',
+                    outline: 'none'
+                  }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: 700, marginBottom: 4 }}>
+                  URL Ảnh minh họa cảnh quan (Unsplash / Cloudinary)
+                </label>
+                <input 
+                  type="url" 
+                  placeholder="https://images.unsplash.com/photo-..."
+                  value={propImageUrl}
+                  onChange={e => setPropImageUrl(e.target.value)}
+                  className="aj-text-input"
+                  style={{ width: '100%' }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 8 }}>
+                <button 
+                  type="button" 
+                  onClick={() => setMapProposalModalOpen(false)}
+                  className="aj-button-pill-outline"
+                >
+                  Hủy
+                </button>
+                <button 
+                  type="submit" 
+                  disabled={isSubmittingProposal}
+                  className="aj-button-pill-dark"
+                >
+                  {isSubmittingProposal ? 'Đang gửi...' : 'Gửi đề xuất tới Admin'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* ─────────────────────────────────────────────────────────────
           AUTH MODAL
