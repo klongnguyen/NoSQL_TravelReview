@@ -18,6 +18,22 @@ import SeasonalTravelCalendar from './components/SeasonalTravelCalendar';
 import VietnamInteractiveMap from './components/VietnamInteractiveMap';
 import { getPlaceTimingDetails } from './utils/placeTimingHelper';
 
+function getAuthErrorMessage(error, fallbackMessage) {
+  if (!error.response) {
+    return 'Không thể kết nối đến máy chủ. Vui lòng thử lại sau.';
+  }
+
+  const data = error.response.data;
+  if (typeof data?.message === 'string' && data.message.trim()) {
+    return data.message;
+  }
+
+  const validationErrors = Object.values(data?.errors || {})
+    .flat()
+    .filter(message => typeof message === 'string' && message.trim());
+  return validationErrors.length > 0 ? validationErrors.join(' ') : fallbackMessage;
+}
+
 // Dữ liệu Điểm đến nổi bật tham khảo theo hình ảnh thực tế (Image 1 reference)
 // Khẳng định mô hình Đánh giá Du lịch (Review Platform), KHÔNG BÁN TOUR
 const FEATURED_DESTINATIONS = [
@@ -255,11 +271,15 @@ export default function App() {
     // Tải thông tin người dùng nếu có token
     const token = localStorage.getItem('token');
     const savedUser = localStorage.getItem('user');
-    if (token && savedUser) {
+    if (token?.startsWith('mock-')) {
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+    } else if (token && savedUser) {
       try {
         setCurrentUser(JSON.parse(savedUser));
       } catch {
         localStorage.removeItem('token');
+        localStorage.removeItem('user');
       }
     }
 
@@ -449,40 +469,29 @@ export default function App() {
       setAuthEmail('');
       setAuthPassword('');
       setAuthFullName('');
-    } catch {
-      const mockUser = {
-        userId: 'u-' + Date.now(),
-        email: authEmail || 'traveler@travelreview.vn',
-        fullName: authFullName || (authMode === 'login' ? 'Nguyễn Văn Du Khách' : 'Thành viên mới'),
-        role: authEmail.includes('admin') ? 'Admin' : 'Member'
-      };
-      localStorage.setItem('token', 'mock-jwt-token');
-      localStorage.setItem('user', JSON.stringify(mockUser));
-      setCurrentUser(mockUser);
-      setAuthModalOpen(false);
+    } catch (error) {
+      setAuthError(getAuthErrorMessage(error, authMode === 'login'
+        ? 'Đăng nhập không thành công. Vui lòng thử lại.'
+        : 'Đăng ký không thành công. Vui lòng thử lại.'));
     }
   };
 
   const handleQuickLogin = async (role) => {
     const email = role === 'admin' ? 'admin@longo.vn' : 'member@longo.vn';
     const password = 'Member@123';
+    setAuthError('');
+    setUserMenuOpen(false);
     try {
       const res = await authService.login(email, password);
       localStorage.setItem('token', res.data.token);
       localStorage.setItem('user', JSON.stringify(res.data));
       setCurrentUser(res.data);
       setAuthModalOpen(false);
-    } catch {
-      const mockUser = {
-        userId: role === 'admin' ? '651111111111111111111111' : '652222222222222222222222',
-        email: email,
-        fullName: role === 'admin' ? 'Quản trị viên LonGo' : 'Nguyễn Văn Du Khách',
-        role: role === 'admin' ? 'Admin' : 'Member'
-      };
-      localStorage.setItem('token', 'mock-token-' + role);
-      localStorage.setItem('user', JSON.stringify(mockUser));
-      setCurrentUser(mockUser);
-      setAuthModalOpen(false);
+    } catch (error) {
+      setAuthMode('login');
+      setAuthEmail(email);
+      setAuthError(getAuthErrorMessage(error, 'Không thể đăng nhập bằng tài khoản mẫu. Vui lòng thử lại.'));
+      setAuthModalOpen(true);
     }
   };
 
@@ -2739,7 +2748,7 @@ export default function App() {
             </div>
 
             {authError && (
-              <div style={{ padding: '8px 12px', background: '#fee2e2', color: '#991b1b', borderRadius: '4px', fontSize: '13px', marginBottom: 16 }}>
+              <div role="alert" style={{ padding: '8px 12px', background: '#fee2e2', color: '#991b1b', borderRadius: '4px', fontSize: '13px', marginBottom: 16 }}>
                 {authError}
               </div>
             )}
