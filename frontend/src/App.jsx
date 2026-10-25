@@ -5,13 +5,13 @@ import {
   AlertTriangle, Shield, Clock, Trash2, ArrowLeft, Send, Map as MapIcon,
   Calendar, Sparkles, Navigation, Ticket, ExternalLink, Filter, 
   SlidersHorizontal, CheckCircle2, ChevronRight, ChevronLeft, Eye, RefreshCw, Bookmark,
-  BarChart3, TrendingUp, PieChart, Activity, Lock, UserCheck, Trophy, Info
+  BarChart3, TrendingUp, PieChart, Activity, Lock, UserCheck, Trophy, Info, ArrowUpRight
 } from 'lucide-react';
 import { placeService, categoryService, authService, interactionService } from './services/api';
-import MapView from './components/MapView';
 import TripPlanner from './components/TripPlanner';
 import GraphRecommendations from './components/GraphRecommendations';
 import AdminAnalyticsDashboard from './components/AdminAnalyticsDashboard';
+import AdminPortal from './components/AdminPortal';
 import AccountManagement from './components/AccountManagement';
 import RankingLeaderboard from './components/RankingLeaderboard';
 import SeasonalTravelCalendar from './components/SeasonalTravelCalendar';
@@ -137,7 +137,6 @@ export default function App() {
   const [selectedCategory, setSelectedCategory] = useState('');
   const [ratingFilter, setRatingFilter] = useState('all'); // 'all', '4.5', '4.0'
   const [selectedTravelMonth, setSelectedTravelMonth] = useState('all'); // 'all', '1'..'12'
-  const [mapViewSubMode, setMapViewSubMode] = useState('vietnam'); // 'vietnam' | 'coordinates'
   const [sortOption, setSortOption] = useState('ratingDesc');
   const [loading, setLoading] = useState(false);
 
@@ -145,8 +144,9 @@ export default function App() {
   const [activePlace, setActivePlace] = useState(null);
   const [detailReviewTab, setDetailReviewTab] = useState('community'); // 'community', 'google'
 
-  // User Auth State
+  // User Auth & Admin View Mode State
   const [currentUser, setCurrentUser] = useState(null);
+  const [adminViewMode, setAdminViewMode] = useState('portal'); // 'portal' | 'client'
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [authMode, setAuthMode] = useState('login');
@@ -273,7 +273,11 @@ export default function App() {
     const savedUser = localStorage.getItem('user');
     if (token && savedUser) {
       try {
-        setCurrentUser(JSON.parse(savedUser));
+        const u = JSON.parse(savedUser);
+        setCurrentUser(u);
+        if (u.role === 'Admin') {
+          setAdminViewMode('portal');
+        }
       } catch {
         localStorage.removeItem('token');
       }
@@ -479,6 +483,7 @@ export default function App() {
       localStorage.setItem('token', res.data.token);
       localStorage.setItem('user', JSON.stringify(res.data));
       setCurrentUser(res.data);
+      if (res.data?.role === 'Admin') setAdminViewMode('portal');
       setAuthModalOpen(false);
       setAuthEmail('');
       setAuthPassword('');
@@ -493,6 +498,7 @@ export default function App() {
       localStorage.setItem('token', 'mock-jwt-token');
       localStorage.setItem('user', JSON.stringify(mockUser));
       setCurrentUser(mockUser);
+      if (mockUser.role === 'Admin') setAdminViewMode('portal');
       setAuthModalOpen(false);
     }
   };
@@ -505,6 +511,7 @@ export default function App() {
       localStorage.setItem('token', res.data.token);
       localStorage.setItem('user', JSON.stringify(res.data));
       setCurrentUser(res.data);
+      if (res.data?.role === 'Admin') setAdminViewMode('portal');
       setAuthModalOpen(false);
     } catch {
       const mockUser = {
@@ -516,6 +523,7 @@ export default function App() {
       localStorage.setItem('token', 'mock-token-' + role);
       localStorage.setItem('user', JSON.stringify(mockUser));
       setCurrentUser(mockUser);
+      if (mockUser.role === 'Admin') setAdminViewMode('portal');
       setAuthModalOpen(false);
     }
   };
@@ -525,6 +533,7 @@ export default function App() {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
     setCurrentUser(null);
+    setAdminViewMode('portal');
     if (currentTab === 'admin' || currentTab === 'favorites' || currentTab === 'account') {
       navigateTo('home');
     }
@@ -933,6 +942,20 @@ export default function App() {
     alert('✓ Đề xuất địa điểm đã được gửi thành công! Dữ liệu đang được chuyển tới Ban Quản Trị để kiểm duyệt.');
   };
 
+  // NẾU LÀ ADMIN VÀ ĐANG Ở CHẾ ĐỘ QUẢN TRỊ RIÊNG (ADMIN PORTAL)
+  if (currentUser?.role === 'Admin' && adminViewMode === 'portal') {
+    return (
+      <AdminPortal
+        currentUser={currentUser}
+        places={places}
+        onRefreshPlaces={fetchBackendPlaces}
+        onSwitchToClientMode={() => setAdminViewMode('client')}
+        onLogout={handleLogout}
+        onSelectPlace={handleOpenDetail}
+      />
+    );
+  }
+
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', backgroundColor: 'var(--aj-canvas)' }}>
       
@@ -1015,13 +1038,16 @@ export default function App() {
               Lập kế hoạch
             </button>
 
-            <button 
-              onClick={() => navigateTo('admin')}
-              className={`aj-nav-item ${currentTab === 'admin' ? 'active' : ''}`}
-              style={{ fontWeight: 700 }}
-            >
-              Báo cáo phân tích
-            </button>
+            {currentUser?.role === 'Admin' && (
+              <button 
+                onClick={() => setAdminViewMode('portal')}
+                className="aj-nav-item"
+                style={{ fontWeight: 800, color: '#fa9000', display: 'flex', alignItems: 'center', gap: 5 }}
+              >
+                <Shield size={14} color="#fa9000" />
+                <span>Trang Quản Trị</span>
+              </button>
+            )}
           </nav>
 
           {/* User Controls: Trái tim (Yêu thích) -> Icon hình người (Quản lý tài khoản dropdown) */}
@@ -1213,28 +1239,30 @@ export default function App() {
                             )}
                           </button>
 
-                          <button
-                            onClick={() => { setUserMenuOpen(false); navigateTo('admin'); }}
-                            style={{
-                              width: '100%',
-                              padding: '9px 16px',
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: 10,
-                              background: currentTab === 'admin' ? '#f8fafc' : 'none',
-                              border: 'none',
-                              cursor: 'pointer',
-                              fontSize: '13px',
-                              fontWeight: 600,
-                              color: '#0f172a',
-                              textAlign: 'left'
-                            }}
-                            onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f1f5f9'}
-                            onMouseLeave={e => e.currentTarget.style.backgroundColor = currentTab === 'admin' ? '#f8fafc' : 'transparent'}
-                          >
-                            <BarChart3 size={15} color="#0f172a" />
-                            <span>Báo cáo phân tích</span>
-                          </button>
+                          {currentUser?.role === 'Admin' && (
+                            <button
+                              onClick={() => { setUserMenuOpen(false); setAdminViewMode('portal'); }}
+                              style={{
+                                width: '100%',
+                                padding: '9px 16px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 10,
+                                background: '#f8fafc',
+                                border: 'none',
+                                cursor: 'pointer',
+                                fontSize: '13px',
+                                fontWeight: 700,
+                                color: '#0f172a',
+                                textAlign: 'left'
+                              }}
+                              onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f1f5f9'}
+                              onMouseLeave={e => e.currentTarget.style.backgroundColor = '#f8fafc'}
+                            >
+                              <Shield size={15} color="#fa9000" />
+                              <span style={{ color: '#fa9000', fontWeight: 800 }}>Vào Trang Quản Trị</span>
+                            </button>
+                          )}
                         </div>
 
                         {/* Phân cách & Đăng xuất */}
@@ -2847,80 +2875,33 @@ export default function App() {
             )}
 
             {/* =========================================================
-                TAB 3: BẢN ĐỒ TƯƠNG TÁC (Địa lý Việt Nam & Tọa độ vệ tinh)
+            {/* =========================================================
+                TAB 3: BẢN ĐỒ ĐỊA LÝ VIỆT NAM (63 Tỉnh Thành & 3 Miền)
                 ========================================================= */}
             {currentTab === 'map' && (
               <div style={{ maxWidth: 1280, margin: '0 auto', padding: '24px 24px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 20, flexWrap: 'wrap', gap: 14 }}>
-                  <div>
-                    <div className="aj-eyebrow-lockup">
-                      <span className="aj-eyebrow-bar" />
-                      <span className="aj-eyebrow-text">BẢN ĐỒ KHÁM PHÁ LONGO</span>
-                    </div>
-                    <h2 className="aj-headline-md">
-                      {mapViewSubMode === 'vietnam' 
-                        ? 'Bản Đồ Địa Lý & 63 Tỉnh Thành Việt Nam' 
-                        : 'Bản Đồ Vệ Tinh Chi Tiết Hơn 40 Điểm Đến'}
-                    </h2>
+                <div style={{ marginBottom: 20 }}>
+                  <div className="aj-eyebrow-lockup">
+                    <span className="aj-eyebrow-bar" />
+                    <span className="aj-eyebrow-text">BẢN ĐỒ KHÁM PHÁ LONGO</span>
                   </div>
-
-                  {/* Bộ chuyển đổi giữa Bản đồ Địa lý VN & Bản đồ Vệ tinh */}
-                  <div style={{ display: 'flex', gap: 6, background: '#f1f5f9', padding: '4px', borderRadius: '8px' }}>
-                    <button
-                      onClick={() => setMapViewSubMode('vietnam')}
-                      style={{
-                        padding: '7px 16px',
-                        borderRadius: '6px',
-                        border: 'none',
-                        fontSize: '13px',
-                        fontWeight: 700,
-                        cursor: 'pointer',
-                        backgroundColor: mapViewSubMode === 'vietnam' ? '#000000' : 'transparent',
-                        color: mapViewSubMode === 'vietnam' ? '#ffffff' : 'var(--aj-slate)',
-                        transition: 'all 0.15s ease'
-                      }}
-                    >
-                      Bản đồ Địa lý VN (63 Tỉnh/3 Miền)
-                    </button>
-                    <button
-                      onClick={() => setMapViewSubMode('coordinates')}
-                      style={{
-                        padding: '7px 16px',
-                        borderRadius: '6px',
-                        border: 'none',
-                        fontSize: '13px',
-                        fontWeight: 700,
-                        cursor: 'pointer',
-                        backgroundColor: mapViewSubMode === 'coordinates' ? '#000000' : 'transparent',
-                        color: mapViewSubMode === 'coordinates' ? '#ffffff' : 'var(--aj-slate)',
-                        transition: 'all 0.15s ease'
-                      }}
-                    >
-                      Bản đồ Vệ tinh (Tọa độ chi tiết)
-                    </button>
-                  </div>
+                  <h2 className="aj-headline-md">
+                    Bản Đồ Địa Lý & 63 Tỉnh Thành Việt Nam
+                  </h2>
                 </div>
 
-                {mapViewSubMode === 'vietnam' ? (
-                  <VietnamInteractiveMap 
-                    onExploreProvince={(prov) => {
-                      const filterKey = prov.matchingFilter || prov.name;
-                      setSelectedCity(filterKey);
-                      navigateTo('explore');
-                    }}
-                    onProposePlace={(prov) => {
-                      setPropDistrict(prov.name);
-                      setPropStreet(prov.capital ? `${prov.capital}, ${prov.name}` : prov.name);
-                      setMapProposalModalOpen(true);
-                    }}
-                  />
-                ) : (
-                  <MapView 
-                    places={places}
-                    onSelectPlace={handleOpenDetail} 
-                    onAddToTrip={handleAddToTrip} 
-                  />
-                )}
+                <VietnamInteractiveMap 
+                  onExploreProvince={(prov) => {
+                    const filterKey = prov.matchingFilter || prov.name;
+                    setSelectedCity(filterKey);
+                    navigateTo('explore');
+                  }}
+                  onProposePlace={currentUser?.role === 'Admin' ? (prov) => {
+                    setPropDistrict(prov.name);
+                    setPropStreet(prov.capital ? `${prov.capital}, ${prov.name}` : prov.name);
+                    setMapProposalModalOpen(true);
+                  } : null}
+                />
               </div>
             )}
 
@@ -3019,8 +3000,9 @@ export default function App() {
                   onAddToTrip={handleAddToTrip}
                 />
 
-                {/* 2. Phần Đóng góp địa điểm mới cho cộng đồng */}
-                <div style={{ marginTop: 48, paddingTop: 36, borderTop: '1px solid var(--aj-hairline)' }}>
+                {/* 2. Phần Đóng góp địa điểm mới (Chỉ dành riêng cho Admin quản trị) */}
+                {currentUser?.role === 'Admin' && (
+                  <div style={{ marginTop: 48, paddingTop: 36, borderTop: '1px solid var(--aj-hairline)' }}>
                   <div className="aj-eyebrow-lockup">
                     <span className="aj-eyebrow-bar" />
                     <span className="aj-eyebrow-text">ĐÓNG GÓP CỘNG ĐỒNG</span>
@@ -3179,6 +3161,7 @@ export default function App() {
                     </button>
                   </form>
                 </div>
+                )}
 
               </div>
             )}
@@ -3230,13 +3213,28 @@ export default function App() {
             )}
 
             {/* =========================================================
-                TAB 7: BÁO CÁO PHÂN TÍCH QUẢN TRỊ & DATA ANALYST
+                TAB 7: BÁO CÁO PHÂN TÍCH QUẢN TRỊ (CHỈ DÀNH CHO ADMIN)
                 ========================================================= */}
             {currentTab === 'admin' && (
-              <AdminAnalyticsDashboard 
-                places={places} 
-                onRefreshData={fetchBackendPlaces} 
-              />
+              currentUser?.role === 'Admin' ? (
+                <AdminAnalyticsDashboard 
+                  places={places} 
+                  onRefreshData={fetchBackendPlaces} 
+                />
+              ) : (
+                <div style={{ maxWidth: 560, margin: '60px auto', textAlign: 'center', padding: '40px 24px', background: '#ffffff', borderRadius: 10, border: '1px solid #e2e8f0', boxShadow: '0 4px 16px rgba(0,0,0,0.04)' }}>
+                  <Shield size={44} color="#ef4444" style={{ margin: '0 auto 14px auto' }} />
+                  <h3 style={{ fontSize: 18, fontWeight: 800, color: '#0f172a', marginBottom: 8 }}>
+                    Khu Vực Quản Trị Hạn Chế
+                  </h3>
+                  <p style={{ fontSize: 13.5, color: '#64748b', lineHeight: 1.5, marginBottom: 20 }}>
+                    Trang Báo cáo phân tích số liệu chỉ dành riêng cho tài khoản Quản trị viên (Admin). Tài khoản thành viên du khách không có quyền truy cập khu vực này.
+                  </p>
+                  <button onClick={() => navigateTo('home')} className="aj-button-pill-dark" style={{ padding: '8px 20px', fontSize: 13 }}>
+                    Quay về Trang chủ
+                  </button>
+                </div>
+              )
             )}
 
             {/* =========================================================
@@ -3260,9 +3258,9 @@ export default function App() {
       </main>
 
       {/* ─────────────────────────────────────────────────────────────
-          MODAL ĐỀ XUẤT ĐỊA ĐIỂM TƯƠNG TÁC TRỰC TIẾP TRÊN BẢN ĐỒ
+          MODAL ĐỀ XUẤT ĐỊA ĐIỂM (CHỈ DÀNH CHO ADMIN)
           ───────────────────────────────────────────────────────────── */}
-      {mapProposalModalOpen && (
+      {mapProposalModalOpen && currentUser?.role === 'Admin' && (
         <div style={{
           position: 'fixed',
           inset: 0,
@@ -3661,7 +3659,9 @@ export default function App() {
                 <li><a href="#explore" onClick={(e) => { e.preventDefault(); navigateTo('explore'); }}>Khám phá & Đánh giá</a></li>
                 <li><a href="#map" onClick={(e) => { e.preventDefault(); navigateTo('map'); }}>Bản đồ vệ tinh (40+ điểm)</a></li>
                 <li><a href="#trip" onClick={(e) => { e.preventDefault(); navigateTo('trip'); }}>Lập kế hoạch du lịch</a></li>
-                <li><a href="#admin" onClick={(e) => { e.preventDefault(); navigateTo('admin'); }}>Báo cáo phân tích (Data Analyst)</a></li>
+                {currentUser?.role === 'Admin' && (
+                  <li><a href="#admin" onClick={(e) => { e.preventDefault(); navigateTo('admin'); }}>Báo cáo phân tích (Quản trị)</a></li>
+                )}
               </ul>
             </div>
 

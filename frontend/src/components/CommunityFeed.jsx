@@ -1,10 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Heart, MessageSquare, Share2, MapPin, Smile, Image as ImageIcon, 
   Send, Flag, EyeOff, ShieldCheck, CheckCircle2, X, Plus, AlertTriangle, 
-  Clock, MoreHorizontal, User, Sparkles, Filter, ChevronRight
+  Clock, MoreHorizontal, User, Sparkles, Filter, ChevronRight, Search
 } from 'lucide-react';
-import MapPlacePickerModal from './MapPlacePickerModal';
 
 export default function CommunityFeed({ 
   currentUser, 
@@ -20,8 +19,9 @@ export default function CommunityFeed({
 
   // Form đăng bài
   const [postContent, setPostContent] = useState('');
-  const [selectedPlaceTag, setSelectedPlaceTag] = useState(null); // { placeId, placeName, district, isProposed }
-  const [isMapPickerOpen, setIsMapPickerOpen] = useState(false);
+  const [selectedPlaceTag, setSelectedPlaceTag] = useState(null); // { placeId, placeName, district }
+  const [isPlaceDropdownOpen, setIsPlaceDropdownOpen] = useState(false);
+  const [placeSearchTerm, setPlaceSearchTerm] = useState('');
   const [selectedMood, setSelectedMood] = useState('Tuyệt vời 😊');
   const [postImages, setPostImages] = useState([]);
   const [submitMessage, setSubmitMessage] = useState('');
@@ -43,6 +43,21 @@ export default function CommunityFeed({
     { label: 'Lãng mạn 💖', icon: '💖' },
     { label: 'Hào hứng 🚀', icon: '🚀' }
   ];
+
+  // Lọc địa điểm chỉ từ database
+  const filteredDatabasePlaces = useMemo(() => {
+    if (!placeSearchTerm.trim()) {
+      return places.slice(0, 15);
+    }
+    const q = placeSearchTerm.toLowerCase().trim();
+    return places.filter(p => {
+      const name = (p.name || '').toLowerCase();
+      const district = (p.address?.district || '').toLowerCase();
+      const city = (p.address?.city || '').toLowerCase();
+      const cat = (p.categoryName || '').toLowerCase();
+      return name.includes(q) || district.includes(q) || city.includes(q) || cat.includes(q);
+    }).slice(0, 20);
+  }, [places, placeSearchTerm]);
 
   // Dữ liệu mẫu ban đầu cho Feed cộng đồng (phòng khi backend mới khởi động)
   const initialDemoPosts = [
@@ -528,31 +543,128 @@ export default function CommunityFeed({
               borderTop: '1px solid #f1f5f9'
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                {/* Gắn thẻ địa điểm thông qua Google Map */}
+                {/* Gắn thẻ địa điểm có sẵn trong Database */}
                 {!selectedPlaceTag ? (
-                  <button
-                    type="button"
-                    onClick={() => setIsMapPickerOpen(true)}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 6,
-                      background: '#f0f9ff',
-                      border: '1px solid #bae6fd',
-                      color: '#0284c7',
-                      padding: '5px 12px',
-                      borderRadius: 20,
-                      fontSize: 12,
-                      fontWeight: 700,
-                      cursor: 'pointer',
-                      transition: 'all 0.15s ease'
-                    }}
-                    onMouseEnter={e => e.currentTarget.style.background = '#e0f2fe'}
-                    onMouseLeave={e => e.currentTarget.style.background = '#f0f9ff'}
-                  >
-                    <MapPin size={14} color="#0284c7" />
-                    <span>Gắn thẻ địa điểm Google Map</span>
-                  </button>
+                  <div style={{ position: 'relative' }}>
+                    <button
+                      type="button"
+                      onClick={() => setIsPlaceDropdownOpen(!isPlaceDropdownOpen)}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        background: '#f8fafc',
+                        border: '1px solid #cbd5e1',
+                        color: '#0f172a',
+                        padding: '5px 12px',
+                        borderRadius: 20,
+                        fontSize: 12,
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        transition: 'all 0.15s ease'
+                      }}
+                      onMouseEnter={e => e.currentTarget.style.borderColor = '#94a3b8'}
+                      onMouseLeave={e => e.currentTarget.style.borderColor = '#cbd5e1'}
+                    >
+                      <MapPin size={14} color="#0284c7" />
+                      <span>Gắn thẻ địa điểm...</span>
+                    </button>
+
+                    {/* Popover danh sách địa điểm trong Database */}
+                    {isPlaceDropdownOpen && (
+                      <div style={{
+                        position: 'absolute',
+                        top: 'calc(100% + 6px)',
+                        left: 0,
+                        width: 320,
+                        maxHeight: 280,
+                        background: '#ffffff',
+                        borderRadius: 10,
+                        boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.18), 0 8px 10px -6px rgba(0, 0, 0, 0.1)',
+                        border: '1px solid #e2e8f0',
+                        zIndex: 60,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        overflow: 'hidden'
+                      }}>
+                        {/* Ô tìm kiếm */}
+                        <div style={{ padding: '8px 10px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', gap: 6, background: '#f8fafc' }}>
+                          <Search size={14} color="#64748b" />
+                          <input
+                            type="text"
+                            autoFocus
+                            placeholder="Tìm địa điểm trong hệ thống..."
+                            value={placeSearchTerm}
+                            onChange={e => setPlaceSearchTerm(e.target.value)}
+                            style={{
+                              border: 'none',
+                              background: 'none',
+                              outline: 'none',
+                              fontSize: 12,
+                              width: '100%',
+                              color: '#0f172a'
+                            }}
+                          />
+                          {placeSearchTerm && (
+                            <button
+                              type="button"
+                              onClick={() => setPlaceSearchTerm('')}
+                              style={{ border: 'none', background: 'none', cursor: 'pointer', padding: 0, color: '#94a3b8' }}
+                            >
+                              <X size={12} />
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Danh sách địa điểm */}
+                        <div style={{ overflowY: 'auto', maxHeight: 220 }}>
+                          {filteredDatabasePlaces.length === 0 ? (
+                            <div style={{ padding: '16px 12px', textAlign: 'center', fontSize: 12, color: '#94a3b8' }}>
+                              Không tìm thấy địa điểm nào trong database.
+                            </div>
+                          ) : (
+                            filteredDatabasePlaces.map(p => (
+                              <div
+                                key={p.id || p._id}
+                                onClick={() => {
+                                  setSelectedPlaceTag({
+                                    placeId: p.id || p._id,
+                                    placeName: p.name,
+                                    district: p.address?.district || p.address?.city || ''
+                                  });
+                                  setIsPlaceDropdownOpen(false);
+                                  setPlaceSearchTerm('');
+                                }}
+                                style={{
+                                  padding: '8px 12px',
+                                  cursor: 'pointer',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'space-between',
+                                  borderBottom: '1px solid #f8fafc',
+                                  transition: 'background 0.15s ease'
+                                }}
+                                onMouseEnter={e => e.currentTarget.style.background = '#f1f5f9'}
+                                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                              >
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                                  <span style={{ fontSize: 12, fontWeight: 700, color: '#0f172a' }}>{p.name}</span>
+                                  <span style={{ fontSize: 11, color: '#64748b' }}>
+                                    📍 {p.address?.district || p.address?.city || 'TP.HCM'}
+                                  </span>
+                                </div>
+                                {p.categoryName && (
+                                  <span style={{ fontSize: 10, background: '#e0f2fe', color: '#0369a1', padding: '2px 6px', borderRadius: 8, fontWeight: 600 }}>
+                                    {p.categoryName}
+                                  </span>
+                                )}
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 ) : (
                   <div style={{
                     display: 'flex',
@@ -570,11 +682,6 @@ export default function CommunityFeed({
                     <span>{selectedPlaceTag.placeName}</span>
                     {selectedPlaceTag.district && (
                       <span style={{ opacity: 0.75, fontSize: 11, fontWeight: 500 }}>({selectedPlaceTag.district})</span>
-                    )}
-                    {selectedPlaceTag.isProposed && (
-                      <span style={{ fontSize: 10, background: '#fef3c7', color: '#b45309', padding: '1px 5px', borderRadius: 4, fontWeight: 700 }}>
-                        ✦ Đề xuất mới
-                      </span>
                     )}
                     <button
                       type="button"
@@ -976,15 +1083,6 @@ export default function CommunityFeed({
           })}
         </div>
       )}
-
-      {/* MODAL GẮN THẺ ĐỊA ĐIỂM TỪ GOOGLE MAP & ĐỀ XUẤT ĐỊA ĐIỂM MỚI */}
-      <MapPlacePickerModal
-        isOpen={isMapPickerOpen}
-        onClose={() => setIsMapPickerOpen(false)}
-        places={places}
-        onSelectPlaceTag={(tag) => setSelectedPlaceTag(tag)}
-        currentUser={currentUser}
-      />
 
     </div>
   );
