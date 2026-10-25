@@ -210,43 +210,38 @@ public class PlaceService : IPlaceService
         string userId,
         UpdateReviewRequest request)
     {
-        var place = await _context.Places.Find(p => p.Id == placeId).FirstOrDefaultAsync();
+        var place = await GetPlaceByIdAsync(placeId);
         if (place == null) return false;
 
         var review = place.Reviews.FirstOrDefault(r => r.ReviewId == reviewId);
         if (review == null) return false;
-
-        // BR-02 / FR-REV-02: Chỉ chính chủ được sửa
         if (review.UserId != userId)
         {
             throw new UnauthorizedAccessException("Bạn không có quyền sửa đánh giá này.");
         }
 
-        // BR-09: Giới hạn sửa trong 7 ngày (168 giờ) kể từ createdAt ban đầu
-        if ((DateTime.UtcNow - review.CreatedAt).TotalHours > 168)
+        var editDeadline = DateTime.UtcNow.AddDays(-7);
+        if (review.CreatedAt < editDeadline)
         {
             throw new InvalidOperationException("Bài đánh giá đã quá thời hạn 7 ngày kể từ khi tạo, không thể chỉnh sửa.");
         }
 
-        var filter = Builders<Place>.Filter.And(
-            Builders<Place>.Filter.Eq(p => p.Id, placeId),
-            Builders<Place>.Filter.Eq("reviews.reviewId", reviewId)
-        );
-
+        // Typed ElemMatch preserves the ObjectId representation of nested reviewId/userId.
+        // Recheck ownership and the edit window in the write, not only in the preceding read.
+        var filter = Builders<Place>.Filter.Eq(p => p.Id, place.Id)
+            & Builders<Place>.Filter.Eq(p => p.Status, "active")
+            & Builders<Place>.Filter.ElemMatch(p => p.Reviews,
+                r => r.ReviewId == reviewId && r.UserId == userId && r.CreatedAt >= editDeadline);
         var update = Builders<Place>.Update
             .Set("reviews.$.rating", request.Rating)
             .Set("reviews.$.content", request.Content)
             .Set("reviews.$.images", request.Images)
-            .Set("reviews.$.updatedAt", DateTime.UtcNow); // Giữ nguyên createdAt ban đầu
+            .Set("reviews.$.updatedAt", DateTime.UtcNow);
 
         var result = await _context.Places.UpdateOneAsync(filter, update);
-        if (result.ModifiedCount > 0)
-        {
-            await RecalculateRatingAndCountAsync(placeId);
-            return true;
-        }
-
-        return false;
+        if (result.MatchedCount == 0) return false;
+        await RecalculateRatingAndCountAsync(place.Id);
+        return true;
     }
 
     public async Task<bool> DeleteReviewAsync(string placeId, string reviewId, string userId, bool isAdmin)

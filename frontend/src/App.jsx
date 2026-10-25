@@ -8,6 +8,9 @@ import {
   BarChart3, TrendingUp, PieChart, Activity, Lock, UserCheck, Trophy, Info
 } from 'lucide-react';
 import { placeService, categoryService, authService, interactionService } from './services/api';
+import ReviewForm from './components/ReviewForm';
+import PlaceImageGallery from './components/PlaceImageGallery';
+import { canEditReview } from './utils/reviewRules';
 import MapView from './components/MapView';
 import TripPlanner from './components/TripPlanner';
 import GraphRecommendations from './components/GraphRecommendations';
@@ -158,8 +161,8 @@ export default function App() {
   const [favoritePlaceIds, setFavoritePlaceIds] = useState([]);
 
   // Review & Comment Submissions
-  const [reviewRating, setReviewRating] = useState(5);
-  const [reviewContent, setReviewContent] = useState('');
+  const [editingReview, setEditingReview] = useState(null);
+  const [reviewNotice, setReviewNotice] = useState('');
   const [isSubmittingReview, setIsSubmittingReview] = useState(false);
   const [commentContent, setCommentContent] = useState('');
   const [activeCommentReviewId, setActiveCommentReviewId] = useState(null);
@@ -186,6 +189,8 @@ export default function App() {
   const navigateTo = useCallback((tab, place = null, pushHistory = true) => {
     setCurrentTab(tab);
     setActivePlace(place);
+    setEditingReview(null);
+    setReviewNotice('');
     setUserMenuOpen(false);
     window.scrollTo({ top: 0, behavior: 'smooth' });
 
@@ -303,10 +308,13 @@ export default function App() {
             ticketPrice: p.ticketPrice || fallback.ticketPrice || 'Miễn phí vào cổng',
             ticketType: p.ticketType || fallback.ticketType || 'free',
             googleReviewSnippet: p.googleReviewSnippet || fallback.googleReviewSnippet || 'Địa điểm được Google Maps đánh giá cao.',
-            reviews: (p.reviews && p.reviews.length > 0) ? p.reviews : (fallback.reviews || [])
+            reviews: p.reviews || []
           };
         });
         setPlaces(backendPlaces);
+        setActivePlace(previous => previous
+          ? backendPlaces.find(place => place.id === previous.id || place.slug === previous.slug) || previous
+          : null);
       }
     } catch (err) {
       console.warn('Backend chưa phản hồi, sử dụng dữ liệu REAL_PLACES_DATA:', err);
@@ -496,57 +504,21 @@ export default function App() {
     }
   };
 
-  const handleCreateReview = async (e) => {
-    e.preventDefault();
-    if (!currentUser) {
-      setAuthModalOpen(true);
-      return;
-    }
-    if (!reviewContent.trim()) return;
+  const handleReviewSaved = (savedPlace, message) => {
+    setPlaces(previous => previous.map(place =>
+      place.id === savedPlace.id || place.slug === savedPlace.slug ? { ...place, ...savedPlace } : place));
+    setActivePlace(previous => previous && (previous.id === savedPlace.id || previous.slug === savedPlace.slug)
+      ? { ...previous, ...savedPlace } : previous);
+    setEditingReview(null);
+    setReviewNotice(message);
+  };
 
-    setIsSubmittingReview(true);
-    const targetPlaceId = activePlace.slug || activePlace.id || activePlace._id;
-
-    const newRev = {
-      reviewId: 'rev-' + Date.now(),
-      authorName: currentUser.fullName,
-      authorAvatar: currentUser.avatarUrl || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150',
-      rating: reviewRating,
-      content: reviewContent.trim(),
-      createdAt: new Date().toISOString(),
-      likes: [],
-      comments: []
-    };
-
-    // 1. Gọi API Web API lưu trực tiếp vào MongoDB Atlas
-    try {
-      await placeService.createReview(targetPlaceId, {
-        rating: reviewRating,
-        content: reviewContent.trim(),
-        images: []
-      });
-      console.log('[REVIEW-SAVED] Đã lưu đánh giá thành công vào MongoDB Atlas!');
-    } catch (err) {
-      console.warn('Lưu API review (hoặc offline), tiến hành cập nhật giao diện:', err.response?.data || err.message);
-    }
-
-    // 2. Cập nhật state giao diện tức thời để Data Analyst dashboard và trang chi tiết nhảy số liệu ngay
-    const updatedReviews = [newRev, ...(activePlace.reviews || [])];
-    const newCount = updatedReviews.length;
-    const newAvg = Number((updatedReviews.reduce((sum, r) => sum + r.rating, 0) / newCount).toFixed(1));
-
-    const updatedPlace = {
-      ...activePlace,
-      reviews: updatedReviews,
-      reviewCount: newCount,
-      ratingAverage: newAvg
-    };
-
-    setActivePlace(updatedPlace);
-    setPlaces(places.map(p => ((p.slug === activePlace.slug || p.id === activePlace.id || p._id === activePlace._id) ? updatedPlace : p)));
-    setReviewContent('');
-    setIsSubmittingReview(false);
-    alert('✓ Đã đăng bài đánh giá thành công! Dữ liệu đã được lưu vào hệ thống và cơ sở dữ liệu MongoDB Atlas.');
+  const handleEditReview = (place, review) => {
+    if (!canEditReview(review, currentUser) || isSubmittingReview) return;
+    navigateTo(currentTab || 'explore', place);
+    setDetailReviewTab('community');
+    setEditingReview({ placeId: place.id || place._id || place.slug, reviewId: review.reviewId });
+    requestAnimationFrame(() => document.getElementById('review-form')?.scrollIntoView({ behavior: 'smooth', block: 'center' }));
   };
 
   const handleDeleteReview = async (placeId, reviewId) => {
@@ -1429,13 +1401,7 @@ export default function App() {
 
             {/* Media Photography & Description */}
             <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.4fr) minmax(0, 1fr)', gap: 28, marginBottom: 36 }}>
-              <div style={{ height: 380, borderRadius: 'var(--aj-rounded-md)', overflow: 'hidden', backgroundColor: 'var(--aj-soft)' }}>
-                <img 
-                  src={activePlace.images?.[0]?.url || 'https://images.unsplash.com/photo-1583417319070-4a69db38a482?w=800'} 
-                  alt={activePlace.name}
-                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                />
-              </div>
+              <PlaceImageGallery key={activePlace.id || activePlace.slug} images={activePlace.images || []} name={activePlace.name} />
 
               <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
                 <div>
@@ -1539,68 +1505,19 @@ export default function App() {
                   </div>
                 </div>
               ) : (
-                <form onSubmit={handleCreateReview} style={{ padding: 20, background: 'var(--aj-soft)', borderRadius: 'var(--aj-rounded-md)', marginBottom: 28, border: '1px solid var(--aj-hairline)' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
-                    <div style={{ fontSize: '15px', fontWeight: 700, color: 'var(--aj-ink)' }}>
-                      Chia sẻ trải nghiệm thực tế của bạn về {activePlace.name}
-                    </div>
-                    <span style={{ fontSize: '12px', background: '#000000', color: '#ffffff', padding: '4px 10px', borderRadius: '12px', fontWeight: 600 }}>
-                      Tài khoản: {currentUser.fullName} ({currentUser.role || 'Thành viên'})
-                    </span>
-                  </div>
-                  
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
-                    <span style={{ fontSize: '13.5px', color: 'var(--aj-slate)' }}>Chấm điểm:</span>
-                    <div style={{ display: 'flex', gap: 4 }}>
-                      {[1, 2, 3, 4, 5].map(star => (
-                        <button 
-                          key={star} 
-                          type="button" 
-                          onClick={() => setReviewRating(star)}
-                          style={{ padding: 2, background: 'none', border: 'none', cursor: 'pointer' }}
-                        >
-                          <Star 
-                            size={22} 
-                            fill={star <= reviewRating ? "#eab308" : "none"} 
-                            color={star <= reviewRating ? "#eab308" : "#cbd5e1"} 
-                          />
-                        </button>
-                      ))}
-                    </div>
-                    <span style={{ fontSize: '14px', fontWeight: 700, color: 'var(--aj-ink)' }}>
-                      {reviewRating} / 5 sao
-                    </span>
-                  </div>
-
-                  <textarea 
-                    rows={3} 
-                    placeholder="Chia sẻ nhận xét chân thực của bạn về không gian, giá vé, giờ mở cửa hoặc lời khuyên hữu ích cho người đến sau (tối thiểu 10 ký tự)..."
-                    value={reviewContent}
-                    onChange={e => setReviewContent(e.target.value)}
-                    style={{
-                      width: '100%',
-                      padding: '12px 14px',
-                      borderRadius: 'var(--aj-rounded-sm)',
-                      border: '1px solid var(--aj-hairline)',
-                      fontFamily: 'inherit',
-                      fontSize: '14px',
-                      marginBottom: 12,
-                      outline: 'none',
-                      resize: 'vertical'
-                    }}
-                    required
+                <div>
+                  {reviewNotice && <p role="status" style={{ padding: 12, background: '#dcfce7', color: '#166534', borderRadius: 6 }}>{reviewNotice}</p>}
+                  <ReviewForm
+                    key={`${activePlace.id || activePlace.slug}:${currentUser.userId || currentUser.id}:${editingReview?.reviewId || 'new'}`}
+                    place={activePlace}
+                    currentUser={currentUser}
+                    editingReview={editingReview?.placeId === (activePlace.id || activePlace._id || activePlace.slug)
+                      ? activePlace.reviews?.find(review => review.reviewId === editingReview.reviewId) : null}
+                    onCancelEdit={() => setEditingReview(null)}
+                    onSaved={handleReviewSaved}
+                    onBusyChange={setIsSubmittingReview}
                   />
-
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
-                    <span style={{ fontSize: '12px', color: 'var(--aj-slate)' }}>
-                      Đánh giá sẽ đồng bộ trực tiếp vào cơ sở dữ liệu MongoDB Atlas và hiển thị trên LonGo
-                    </span>
-                    <button type="submit" disabled={isSubmittingReview} className="aj-button-pill-dark">
-                      <Send size={14} />
-                      <span>{isSubmittingReview ? 'Đang lưu vào Atlas...' : 'Đăng bài đánh giá'}</span>
-                    </button>
-                  </div>
-                </form>
+                </div>
               )}
 
               {/* Danh sách bài đánh giá */}
@@ -1626,6 +1543,15 @@ export default function App() {
                         <p className="aj-body" style={{ fontSize: '14.5px', marginBottom: 12 }}>
                           {rev.content}
                         </p>
+                        {rev.images?.length > 0 && <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
+                          {rev.images.map((image, index) => <a key={`${image.url}-${index}`} href={image.url} target="_blank" rel="noopener noreferrer">
+                            <img src={image.url} alt={`Ảnh đánh giá ${index + 1} của ${rev.authorName}`} style={{ width: 100, height: 80, objectFit: 'cover', borderRadius: 6 }} />
+                          </a>)}
+                        </div>}
+                        {canEditReview(rev, currentUser) && <button type="button" disabled={isSubmittingReview}
+                          onClick={() => handleEditReview(activePlace, rev)} className="aj-button-pill-outline" style={{ marginBottom: 12 }}>
+                          Sửa đánh giá
+                        </button>}
 
                         <div style={{ display: 'flex', gap: 16 }}>
                           <button 
@@ -2696,6 +2622,7 @@ export default function App() {
                 onLogout={handleLogout}
                 onSelectPlace={handleOpenDetail}
                 onDeleteReview={handleDeleteReview}
+                onEditReview={handleEditReview}
               />
             )}
 
