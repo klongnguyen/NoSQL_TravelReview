@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { canEditReview, isReviewOwner } from '../utils/reviewRules';
 import { 
   User, Shield, Star, Clock, Trash2, Edit3, 
   Heart, LogOut, CheckCircle2, AlertCircle, Compass, LogIn
@@ -11,7 +12,8 @@ export default function AccountManagement({
   onOpenAuthModal, 
   onLogout, 
   onSelectPlace,
-  onDeleteReview
+  onDeleteReview,
+  onEditReview
 }) {
   const [activeSubTab, setActiveSubTab] = useState('my-reviews'); // 'my-reviews', 'favorites'
 
@@ -22,10 +24,7 @@ export default function AccountManagement({
 
     places.forEach(place => {
       (place.reviews || []).forEach(rev => {
-        const isMyReview = 
-          rev.userId === currentUser.userId || 
-          rev.userId === currentUser.id || 
-          rev.authorName === currentUser.fullName;
+        const isMyReview = isReviewOwner(rev, currentUser);
 
         if (isMyReview) {
           reviewsList.push({
@@ -307,6 +306,11 @@ export default function AccountManagement({
                       >
                         Xem trên địa điểm
                       </button>
+                      {onEditReview && canEditReview(rev, currentUser) && <button
+                        type="button" onClick={() => onEditReview(rev.placeObj, rev)}
+                        className="aj-button-pill-outline" style={{ fontSize: 12 }}>
+                        Sửa đánh giá
+                      </button>}
                       {onDeleteReview && (
                         <button
                           onClick={() => onDeleteReview(rev.placeId, rev.reviewId)}
