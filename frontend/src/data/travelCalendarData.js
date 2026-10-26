@@ -1609,7 +1609,7 @@ export const VIETNAM_GEO_REGIONS = [
         capital: 'TP. Tây Ninh',
         bestSeason: 'Tháng 11 - 5 (Mùa khô, Lễ hội xuân Núi Bà, Hội Yến Diêu Trì Cung)',
         wikiSummary: 'Vùng đất địa linh nhân kiệt với Núi Bà Đen - Nóc nhà Nam Bộ cao 986m, Tòa thánh Cao Đài uy nghiêm và Hồ Dầu Tiếng mênh mông như biển hồ.',
-        image: 'https://images.unsplash.com/photo-1519681393784-d120267933ba?w=800&auto=format&fit=crop&q=80',
+        image: '/images/toa-thanh-tay-ninh.jpg',
         highlights: ['Quần thể Núi Bà Đen', 'Tượng Phật Bà Tây Bổ Đà Sơn', 'Tòa Thánh Tây Ninh', 'Hồ Dầu Tiếng', 'Thung lũng Ma Thiên Lãnh'],
         wikiUrl: 'https://vi.wikipedia.org/wiki/T%C3%A2y_Ninh',
         matchingDistricts: ['Tây Ninh', 'Núi Bà Đen']
@@ -1640,7 +1640,7 @@ export const VIETNAM_GEO_REGIONS = [
         capital: 'TP. Rạch Giá',
         bestSeason: 'Tháng 11 - 4 (Mùa khô hoàn hảo, biển êm như mặt gương)',
         wikiSummary: 'Kiên Giang sở hữu Phú Quốc - Thành phố đảo đầu tiên của Việt Nam và hòn đảo ngọc du lịch tầm cỡ quốc tế với Bãi Sao, Grand World và cáp treo Hòn Thơm vượt biển.',
-        image: 'https://images.unsplash.com/photo-1540555700478-4be289fbecef?w=800&auto=format&fit=crop&q=80',
+        image: '/images/phu-quoc-sunset-kiss-bridge.jpg',
         highlights: ['Đảo ngọc Phú Quốc', 'Bãi Sao cát trắng', 'Cáp treo Hòn Thơm', 'Grand World Phú Quốc', 'Vườn Quốc gia Phú Quốc'],
         wikiUrl: 'https://vi.wikipedia.org/wiki/Ki%C3%AAn_Giang',
         matchingDistricts: ['Phú Quốc', 'Kiên Giang']

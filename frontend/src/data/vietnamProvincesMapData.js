@@ -828,7 +828,7 @@ export const VIETNAM_PROVINCES_DATA = [
     "area": "4.041 km²",
     "population": "Khoảng 1,19 triệu người",
     "wikiSummary": "Nóc nhà Nam Bộ với Núi Bà Đen cao 986m, thánh địa tôn giáo Cao Đài Tòa Thánh Tây Ninh rực rỡ sắc màu, cùng hồ Dầu Tiếng mênh mông sông nước thanh bình.",
-    "thumbnail": "https://images.unsplash.com/photo-1544644181-1484b3fdfc62?auto=format&fit=crop&w=800&q=80",
+    "thumbnail": "/images/toa-thanh-tay-ninh.jpg",
     "famousLandmarks": [
       "Quần thể Danh thắng Núi Bà Đen",
       "Tòa Thánh Tây Ninh",
@@ -1344,7 +1344,7 @@ export const VIETNAM_PROVINCES_DATA = [
     "area": "6.348 km²",
     "population": "Khoảng 1,8 triệu người",
     "wikiSummary": "Vùng đất biển đảo Tây Nam Tổ quốc với thành phố đảo ngọc Phú Quốc danh tiếng quốc tế. Nơi đây sở hữu bãi Sao cát trắng mịn, rạn san hô Nam đảo tuyệt mỹ và những hoàng hôn lộng lẫy nhất Việt Nam.",
-    "thumbnail": "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=800&q=80",
+    "thumbnail": "/images/phu-quoc-sunset-kiss-bridge.jpg",
     "famousLandmarks": [
       "Bãi Sao & Bãi Dài Phú Quốc",
       "Grand World & VinWonders",

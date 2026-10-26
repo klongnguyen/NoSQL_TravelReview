@@ -87,7 +87,7 @@ const FEATURED_DESTINATIONS = [
     region: 'Miền Nam',
     placesCount: '39 địa điểm',
     reviewCount: '1.8k đánh giá',
-    image: 'https://images.unsplash.com/photo-1540555700478-4be289fbecef?w=800&auto=format&fit=crop&q=80',
+    image: '/images/phu-quoc-sunset-kiss-bridge.jpg',
     description: 'Hòn đảo ngọc lớn nhất Việt Nam nổi bật với làn nước biển xanh ngọc bích, bãi cát trắng mịn màng và hoàng hôn lộng lẫy bậc nhất vịnh Thái Lan.',
     districtTag: 'Kiên Giang'
   },

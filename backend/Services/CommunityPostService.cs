@@ -20,6 +20,12 @@ public class PostDecisionDto
     public string? RejectionReason { get; set; }
 }
 
+public class ModeratePostDto
+{
+    public bool IsApproved { get; set; }
+    public string? RejectionReason { get; set; }
+}
+
 public interface ICommunityPostService
 {
     Task<List<CommunityPost>> GetPostsAsync(string? status = null, int limit = 20, int skip = 0);
@@ -73,7 +79,10 @@ public class CommunityPostService : ICommunityPostService
         // Gán metadata cho từng ảnh phân tán nếu thiếu
         foreach (var img in post.Images)
         {
-            if (string.IsNullOrEmpty(img.UploadedBy)) img.UploadedBy = userId;
+            if (string.IsNullOrEmpty(img.UploadedBy) || img.UploadedBy == "guest" || !ObjectId.TryParse(img.UploadedBy, out _))
+            {
+                img.UploadedBy = userId;
+            }
             if (string.IsNullOrEmpty(img.StorageKey)) img.StorageKey = $"post_{Guid.NewGuid():N}";
             if (string.IsNullOrEmpty(img.StorageProvider)) img.StorageProvider = "Cloudinary_Distributed_CDN";
         }

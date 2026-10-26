@@ -1060,7 +1060,7 @@ const rawPlaces = [
     city: "Tây Ninh",
     provinceCode: "72",
     coordinates: [106.1365, 11.3092],
-    imageUrl: "https://images.unsplash.com/photo-1548625361-195fe57870a0?w=800&auto=format&fit=crop&q=80",
+    imageUrl: "/images/toa-thanh-tay-ninh.jpg",
     openingHours: "06:00 - 18:00 (Nên đến xem lễ cúng chính lúc 12:00 trưa)",
     ticketPrice: "Miễn phí vé vào cửa",
     ticketType: "free",

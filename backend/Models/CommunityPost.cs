@@ -16,7 +16,6 @@ public class PostImage
     public string StorageProvider { get; set; } = "Cloudinary_Distributed_CDN";
 
     [BsonElement("uploadedBy")]
-    [BsonRepresentation(BsonType.ObjectId)]
     public string UploadedBy { get; set; } = string.Empty;
 
     [BsonElement("uploadedAt")]

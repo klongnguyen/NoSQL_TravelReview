@@ -30505,9 +30505,16 @@ export const REAL_PLACES_DATA = [
     },
     "images": [
       {
-        "url": "https://images.unsplash.com/photo-1548625361-195fe57870a0?w=800&auto=format&fit=crop&q=80",
+        "url": "/images/toa-thanh-tay-ninh.jpg",
         "isCover": true,
+        "caption": "Mặt tiền Tòa Thánh Tây Ninh với hai tòa tháp chuông trống và biểu tượng Thiên Nhãn uy nghiêm",
         "publicId": "places/toa-thanh-tay-ninh"
+      },
+      {
+        "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/1/1a/T%C3%B2a_Th%C3%A1nh_T%C3%A2y_Ninh_042013.JPG/1280px-T%C3%B2a_Th%C3%A1nh_T%C3%A2y_Ninh_042013.JPG",
+        "isCover": false,
+        "caption": "Tòa Thánh Tây Ninh - Thánh địa tôn giáo Cao Đài",
+        "publicId": "places/toa-thanh-tay-ninh-wiki"
       }
     ],
     "status": "active",
@@ -64310,9 +64317,16 @@ export const REAL_PLACES_DATA = [
     },
     "images": [
       {
-        "url": "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=800&auto=format&fit=crop&q=80",
+        "url": "/images/bai-sao-phu-quoc.jpg",
         "isCover": true,
+        "caption": "Bãi Sao Phú Quốc với bãi cát trắng mịn màng như kem và làn nước biển trong vắt màu ngọc bích",
         "publicId": "places/bai-sao-phu-quoc"
+      },
+      {
+        "url": "https://upload.wikimedia.org/wikipedia/commons/6/6e/Bai-sao-phu-quoc-tuonglamphotos.jpg",
+        "isCover": false,
+        "caption": "Bãi Sao nhìn từ trên cao - Đảo ngọc Phú Quốc",
+        "publicId": "places/bai-sao-phu-quoc-wiki"
       }
     ],
     "status": "active",
@@ -66280,9 +66294,16 @@ export const REAL_PLACES_DATA = [
     },
     "images": [
       {
-        "url": "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=800&auto=format&fit=crop&q=80",
+        "url": "/images/cap-treo-hon-thom.jpg",
         "isCover": true,
+        "caption": "Cabin cáp treo Hòn Thơm bay lơ lửng trên biển ngọc An Thới và những đoàn tàu cá",
         "publicId": "places/cap-treo-hon-thom-phu-quoc"
+      },
+      {
+        "url": "https://upload.wikimedia.org/wikipedia/commons/e/ec/H%C3%B2n_Th%C6%A1m_cable_car_above_the_An_Th%E1%BB%9Bi_township.jpg",
+        "isCover": false,
+        "caption": "Toàn cảnh tuyến cáp treo ba dây vượt biển Hòn Thơm dài nhất thế giới",
+        "publicId": "places/cap-treo-hon-thom-phu-quoc-wiki"
       }
     ],
     "status": "active",

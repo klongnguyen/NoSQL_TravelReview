@@ -151,10 +151,21 @@ export default function CommunityFeed({
       });
       if (res.ok) {
         const data = await res.json();
-        setPendingPosts(data);
+        let local = [];
+        try { local = JSON.parse(localStorage.getItem('longo_pending_posts') || '[]'); } catch {}
+        const dbIds = new Set((data || []).map(p => p.id));
+        const extra = local.filter(p => !dbIds.has(p.id) && p.status === 'pending');
+        setPendingPosts([...(data || []), ...extra]);
+      } else {
+        let local = [];
+        try { local = JSON.parse(localStorage.getItem('longo_pending_posts') || '[]'); } catch {}
+        setPendingPosts(local.filter(p => p.status === 'pending'));
       }
     } catch (err) {
       console.warn('Lỗi fetch pending posts:', err);
+      let local = [];
+      try { local = JSON.parse(localStorage.getItem('longo_pending_posts') || '[]'); } catch {}
+      setPendingPosts(local.filter(p => p.status === 'pending'));
     }
   };
 
@@ -174,18 +185,18 @@ export default function CommunityFeed({
       const reader = new FileReader();
       reader.onload = (loadEvent) => {
         const dataUrl = loadEvent.target.result;
-        setPostImages(prev => [
-          ...prev, 
-          {
-            url: dataUrl,
-            storageKey: `local_${Date.now()}_${file.name}`,
-            storageProvider: 'Distributed_Local_ObjectStore',
-            fileSizeBytes: file.size,
-            format: file.type.split('/')[1] || 'jpg',
-            uploadedAt: new Date().toISOString(),
-            uploadedBy: currentUser?.userId || 'guest'
-          }
-        ]);
+        const imgObj = {
+          url: dataUrl,
+          storageKey: `local_${Date.now()}_${file.name}`,
+          storageProvider: 'Distributed_Local_ObjectStore',
+          fileSizeBytes: file.size,
+          format: file.type.split('/')[1] || 'jpg',
+          uploadedAt: new Date().toISOString()
+        };
+        if (currentUser?.userId && /^[0-9a-fA-F]{24}$/.test(currentUser.userId)) {
+          imgObj.uploadedBy = currentUser.userId;
+        }
+        setPostImages(prev => [...prev, imgObj]);
       };
       reader.readAsDataURL(file);
     });
@@ -236,6 +247,28 @@ export default function CommunityFeed({
       });
 
       if (res.ok) {
+        const resData = await res.json().catch(() => ({}));
+        const createdPost = {
+          id: resData?.postId || ('post-' + Date.now()),
+          authorName: currentUser.fullName || 'Thành viên',
+          userId: currentUser.userId,
+          content: postContent,
+          images: postImages,
+          placeTag: newPostData.placeTag,
+          mood: newPostData.mood,
+          likes: [],
+          likeCount: 0,
+          comments: [],
+          status: 'pending',
+          createdAt: new Date().toISOString()
+        };
+        try {
+          const local = JSON.parse(localStorage.getItem('longo_pending_posts') || '[]');
+          localStorage.setItem('longo_pending_posts', JSON.stringify([createdPost, ...local]));
+        } catch (e) {
+          console.warn('Lỗi lưu local pending post:', e);
+        }
+        setPendingPosts(prev => [createdPost, ...prev]);
         setSubmitMessage('✓ Bài viết đã được gửi thành công! Admin sẽ duyệt bài trước khi xuất hiện trên Bảng tin.');
       } else {
         // Fallback local mock if backend unreachable
@@ -253,10 +286,37 @@ export default function CommunityFeed({
           status: 'pending',
           createdAt: new Date().toISOString()
         };
-        setPendingPosts([mockPending, ...pendingPosts]);
+        try {
+          const local = JSON.parse(localStorage.getItem('longo_pending_posts') || '[]');
+          localStorage.setItem('longo_pending_posts', JSON.stringify([mockPending, ...local]));
+        } catch (e) {
+          console.warn('Lỗi lưu mock pending post local:', e);
+        }
+        setPendingPosts(prev => [mockPending, ...prev]);
         setSubmitMessage('✓ Bài viết đã được gửi thành công và đang chờ Admin duyệt.');
       }
     } catch {
+      const mockPending = {
+        id: 'post-pending-' + Date.now(),
+        authorName: currentUser?.fullName || 'Thành viên',
+        userId: currentUser?.userId,
+        content: postContent,
+        images: postImages,
+        placeTag: newPostData.placeTag,
+        mood: newPostData.mood,
+        likes: [],
+        likeCount: 0,
+        comments: [],
+        status: 'pending',
+        createdAt: new Date().toISOString()
+      };
+      try {
+        const local = JSON.parse(localStorage.getItem('longo_pending_posts') || '[]');
+        localStorage.setItem('longo_pending_posts', JSON.stringify([mockPending, ...local]));
+      } catch (e) {
+        console.warn('Lỗi lưu mock pending post local:', e);
+      }
+      setPendingPosts(prev => [mockPending, ...prev]);
       setSubmitMessage('✓ Bài viết đã được ghi nhận và gửi đến hàng đợi xét duyệt của Admin.');
     }
 
@@ -377,6 +437,10 @@ export default function CommunityFeed({
       // Di chuyển bài đã duyệt sang published
       const target = pendingPosts.find(p => p.id === postId);
       setPendingPosts(pendingPosts.filter(p => p.id !== postId));
+      try {
+        const local = JSON.parse(localStorage.getItem('longo_pending_posts') || '[]');
+        localStorage.setItem('longo_pending_posts', JSON.stringify(local.filter(p => p.id !== postId)));
+      } catch {}
       if (approve && target) {
         setPosts([{ ...target, status: 'published' }, ...posts]);
       }
@@ -384,6 +448,10 @@ export default function CommunityFeed({
     } catch {
       alert('Đã cập nhật trạng thái bài đăng.');
       setPendingPosts(pendingPosts.filter(p => p.id !== postId));
+      try {
+        const local = JSON.parse(localStorage.getItem('longo_pending_posts') || '[]');
+        localStorage.setItem('longo_pending_posts', JSON.stringify(local.filter(p => p.id !== postId)));
+      } catch {}
     }
   };
 

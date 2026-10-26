@@ -129,77 +129,89 @@ export default function AdminPortal({
     return trimmed;
   };
 
-  // Fetch bài đăng chờ duyệt từ Backend
+  // Fetch bài đăng chờ duyệt từ Backend (Đồng bộ chuẩn API & Local Storage)
   const fetchPendingPosts = async () => {
     try {
       const token = localStorage.getItem('token');
-      const res = await fetch('http://localhost:5196/api/community-posts/admin/pending', {
-        headers: token ? { 'Authorization': `Bearer ${token}` } : {}
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setPendingPosts(data);
-      } else {
-        // Fallback mẫu
-        setPendingPosts([
-          {
-            id: 'mock-pend-1',
-            authorName: 'Hoàng Yến',
-            createdAt: new Date(Date.now() - 3600000 * 2).toISOString(),
-            content: 'Cuối tuần dạo phố ẩm thực Chợ Lớn ăn hủ tiếu sa tế và chè mè đen gia truyền. Không gian hoài cổ, giá hợp lý!',
-            placeTag: { placeName: 'Phố Người Hoa - Chợ Lớn' },
-            images: [
-              { url: 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=500' }
-            ]
-          },
-          {
-            id: 'mock-pend-2',
-            authorName: 'Đức Trí',
-            createdAt: new Date(Date.now() - 3600000 * 6).toISOString(),
-            content: 'Ghé Bến Bạch Đằng lúc hoàng hôn ngắm Landmark 81 cực chill. Gió mát rượi, rất đáng để đi cùng gia đình.',
-            placeTag: { placeName: 'Bến Bạch Đằng' },
-            images: [
-              { url: 'https://images.unsplash.com/photo-1509316975850-ff9c5deb0cd9?w=500' }
-            ]
-          }
-        ]);
+      const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+
+      // Ưu tiên gọi GET /api/community-posts?status=pending, fallback sang /admin/pending
+      let res = await fetch('http://localhost:5196/api/community-posts?status=pending', { headers });
+      if (res.status === 404) {
+        res = await fetch('http://localhost:5196/api/community-posts/admin/pending', { headers });
       }
-    } catch {
-      setPendingPosts([
-        {
-          id: 'mock-pend-1',
-          authorName: 'Hoàng Yến',
-          createdAt: new Date(Date.now() - 3600000 * 2).toISOString(),
-          content: 'Cuối tuần dạo phố ẩm thực Chợ Lớn ăn hủ tiếu sa tế và chè mè đen gia truyền. Không gian hoài cổ, giá hợp lý!',
-          placeTag: { placeName: 'Phố Người Hoa - Chợ Lớn' },
-          images: [
-            { url: 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=500' }
-          ]
-        }
-      ]);
+
+      let backendData = [];
+      if (res.ok) {
+        backendData = await res.json();
+      }
+
+      // Đọc các bài pending lưu từ localStorage (bao gồm bài vừa đăng từ phiên du khách)
+      let localPending = [];
+      try {
+        localPending = JSON.parse(localStorage.getItem('longo_pending_posts') || '[]');
+      } catch {
+        localPending = [];
+      }
+
+      // Gộp dữ liệu: Ưu tiên dữ liệu từ backend, bổ sung bài local chưa kịp đồng bộ
+      const dbIds = new Set((backendData || []).map(p => p.id));
+      const extraLocal = localPending.filter(p => !dbIds.has(p.id) && p.status === 'pending');
+      const combined = [...(backendData || []), ...extraLocal];
+
+      setPendingPosts(combined);
+    } catch (err) {
+      console.warn('Lỗi fetch pending posts trong AdminPortal:', err);
+      // Fallback về local storage nếu mạng ngắt kết nối
+      let localPending = [];
+      try {
+        localPending = JSON.parse(localStorage.getItem('longo_pending_posts') || '[]');
+      } catch {
+        localPending = [];
+      }
+      setPendingPosts(localPending.filter(p => p.status === 'pending'));
     }
   };
 
   useEffect(() => {
     fetchPendingPosts();
-  }, []);
+  }, [activeTab]);
 
   // Xử lý Phê duyệt bài đăng (Thông báo nổi tự biến mất, không popup xác nhận)
   const handleApprovePost = async (postId) => {
     try {
       const token = localStorage.getItem('token');
-      await fetch(`http://localhost:5196/api/community-posts/admin/${postId}/moderate`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-        },
-        body: JSON.stringify({ isApproved: true })
+      const headers = {
+        'Content-Type': 'application/json',
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+      };
+
+      // Gọi endpoint chuẩn PATCH /decision
+      let res = await fetch(`http://localhost:5196/api/community-posts/${postId}/decision`, {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify({ approve: true })
       });
-    } catch {
-      // ignore
+
+      // Fallback POST /moderate nếu endpoint cũ
+      if (res.status === 404 || res.status === 405) {
+        await fetch(`http://localhost:5196/api/community-posts/admin/${postId}/moderate`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ isApproved: true })
+        });
+      }
+    } catch (e) {
+      console.warn('Lỗi khi phê duyệt bài đăng:', e);
     }
+
+    // Cập nhật UI & dọn dẹp localStorage
     setPendingPosts(prev => prev.filter(p => p.id !== postId));
+    try {
+      const local = JSON.parse(localStorage.getItem('longo_pending_posts') || '[]');
+      localStorage.setItem('longo_pending_posts', JSON.stringify(local.filter(p => p.id !== postId)));
+    } catch {}
+
     showAdminToast('✓ Đã phê duyệt bài đăng lên Bảng tin cộng đồng');
   };
 
@@ -215,22 +227,40 @@ export default function AdminPortal({
   const handleConfirmReject = async () => {
     if (!postToReject) return;
     const postId = postToReject.id;
+    const reasonText = rejectReason === 'other'
+      ? (customRejectReason.trim() || 'Không phù hợp tiêu chuẩn cộng đồng')
+      : (REJECT_REASONS.find(r => r.id === rejectReason)?.label || 'Vi phạm tiêu chuẩn cộng đồng');
 
     try {
       const token = localStorage.getItem('token');
-      await fetch(`http://localhost:5196/api/community-posts/admin/${postId}/moderate`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-        },
-        body: JSON.stringify({ isApproved: false })
+      const headers = {
+        'Content-Type': 'application/json',
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+      };
+
+      let res = await fetch(`http://localhost:5196/api/community-posts/${postId}/decision`, {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify({ approve: false, rejectionReason: reasonText })
       });
-    } catch {
-      // ignore
+
+      if (res.status === 404 || res.status === 405) {
+        await fetch(`http://localhost:5196/api/community-posts/admin/${postId}/moderate`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ isApproved: false, rejectionReason: reasonText })
+        });
+      }
+    } catch (e) {
+      console.warn('Lỗi khi từ chối bài đăng:', e);
     }
 
     setPendingPosts(prev => prev.filter(p => p.id !== postId));
+    try {
+      const local = JSON.parse(localStorage.getItem('longo_pending_posts') || '[]');
+      localStorage.setItem('longo_pending_posts', JSON.stringify(local.filter(p => p.id !== postId)));
+    } catch {}
+
     setRejectModalOpen(false);
     setPostToReject(null);
     showAdminToast('✓ Đã từ chối bài đăng và gỡ bỏ khỏi hàng đợi');
@@ -1014,9 +1044,20 @@ export default function AdminPortal({
             <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
               
               <div>
-                <h3 style={{ fontSize: 16, fontWeight: 800, marginBottom: 14, color: '#090d16' }}>
-                  Bài Viết Chờ Phê Duyệt ({pendingPosts.length})
-                </h3>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+                  <h3 style={{ fontSize: 16, fontWeight: 800, margin: 0, color: '#090d16' }}>
+                    Bài Viết Chờ Phê Duyệt ({pendingPosts.length})
+                  </h3>
+                  <button
+                    onClick={fetchPendingPosts}
+                    className="aj-button-pill-outline"
+                    style={{ fontSize: 12, padding: '5px 14px', display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}
+                    title="Nhấn để tải lại hàng đợi kiểm duyệt mới nhất từ hệ thống"
+                  >
+                    <RefreshCw size={13} />
+                    <span>Làm mới hàng đợi</span>
+                  </button>
+                </div>
 
                 {pendingPosts.length === 0 ? (
                   <div style={{ background: '#ffffff', padding: '48px 20px', textAlign: 'center', borderRadius: 8, border: '1px solid #e2e8f0', color: '#94a3b8' }}>

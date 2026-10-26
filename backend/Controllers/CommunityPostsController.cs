@@ -50,6 +50,31 @@ public class CommunityPostsController : ControllerBase
     }
 
     [Authorize(Roles = "Admin")]
+    [HttpGet("admin/pending")]
+    public async Task<IActionResult> GetAdminPendingPosts([FromQuery] int limit = 50, [FromQuery] int skip = 0)
+    {
+        var posts = await _postService.GetPostsAsync("pending", limit, skip);
+        return Ok(posts);
+    }
+
+    [Authorize(Roles = "Admin")]
+    [HttpPost("admin/{id}/moderate")]
+    public async Task<IActionResult> ModeratePost(string id, [FromBody] ModeratePostDto dto)
+    {
+        var adminId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var success = await _postService.ProcessPostDecisionAsync(id, adminId, dto.IsApproved, dto.RejectionReason);
+        if (!success)
+        {
+            return BadRequest(new { message = "Không thể xử lý bài đăng này." });
+        }
+
+        return Ok(new
+        {
+            message = dto.IsApproved ? "Đã phê duyệt bài đăng lên Bảng tin!" : "Đã từ chối bài đăng."
+        });
+    }
+
+    [Authorize(Roles = "Admin")]
     [HttpPatch("{id}/decision")]
     public async Task<IActionResult> ProcessPostDecision(string id, [FromBody] PostDecisionDto dto)
     {
