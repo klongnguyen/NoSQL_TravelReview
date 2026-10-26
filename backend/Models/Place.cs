@@ -116,6 +116,9 @@ public class Reply
     [BsonElement("content")]
     public string Content { get; set; } = string.Empty;
 
+    [BsonElement("image")]
+    public CommentImage? Image { get; set; }
+
     [BsonElement("likes")]
     [BsonRepresentation(BsonType.ObjectId)]
     public List<string> Likes { get; set; } = new();

@@ -401,10 +401,6 @@ export default function CommunityFeed({
           1. HEADER BẢNG TIN DU LỊCH & QUY TRÌNH KIỂM DUYỆT
           ───────────────────────────────────────────────────────────── */}
       <div style={{ marginBottom: 24, textAlign: 'center' }}>
-        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 12px', background: '#0f172a', color: '#ffffff', borderRadius: '20px', fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>
-          <Sparkles size={13} color="#38bdf8" />
-          <span>Travel Social Feed • Cộng Đồng Du Lịch LonGo</span>
-        </div>
         <h1 style={{ fontSize: '28px', fontWeight: 900, color: '#000000', margin: '0 0 6px 0', letterSpacing: '-0.02em' }}>
           Khám Phá Trải Nghiệm & Hình Ảnh Chân Thực
         </h1>
@@ -897,8 +893,17 @@ export default function CommunityFeed({
                     <button
                       title="Báo cáo vi phạm"
                       onClick={() => {
-                        if (onReportContent) onReportContent('post', post.placeTag?.placeId || 'community', post.id);
-                        else alert('Báo cáo bài viết đã được gửi đến ban quản trị.');
+                        if (onReportContent) {
+                          onReportContent({
+                            type: 'post',
+                            targetId: post.id,
+                            placeId: post.placeTag?.placeId || 'community',
+                            authorName: post.authorName,
+                            snippet: post.content
+                          });
+                        } else {
+                          alert('Báo cáo bài viết đã được gửi đến ban quản trị.');
+                        }
                       }}
                       style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', padding: 4 }}
                     >
@@ -1006,9 +1011,30 @@ export default function CommunityFeed({
                           <div key={cmt.commentId} style={{ background: '#f8fafc', padding: '10px 14px', borderRadius: 8, fontSize: 13 }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 }}>
                               <span style={{ fontWeight: 800, color: '#0f172a' }}>{cmt.userName}</span>
-                              <span style={{ fontSize: 11, color: '#94a3b8' }}>
-                                {new Date(cmt.createdAt).toLocaleDateString('vi-VN')}
-                              </span>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                <span style={{ fontSize: 11, color: '#94a3b8' }}>
+                                  {new Date(cmt.createdAt).toLocaleDateString('vi-VN')}
+                                </span>
+                                <button
+                                  title="Báo cáo bình luận này"
+                                  onClick={() => {
+                                    if (onReportContent) {
+                                      onReportContent({
+                                        type: 'comment',
+                                        targetId: cmt.commentId,
+                                        placeId: post.placeTag?.placeId || 'community',
+                                        authorName: cmt.userName,
+                                        snippet: cmt.content
+                                      });
+                                    } else {
+                                      alert('Báo cáo bình luận đã được gửi đến ban quản trị.');
+                                    }
+                                  }}
+                                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', padding: 2 }}
+                                >
+                                  <Flag size={12} />
+                                </button>
+                              </div>
                             </div>
                             <div style={{ color: '#334155', lineHeight: 1.4 }}>{cmt.content}</div>
 

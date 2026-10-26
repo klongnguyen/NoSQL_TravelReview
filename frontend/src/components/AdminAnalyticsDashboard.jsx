@@ -5,7 +5,7 @@ import {
   ThumbsUp, ThumbsDown, MessageSquare, Shield, Activity, Users, Eye, ArrowDownRight, ArrowUpRight
 } from 'lucide-react';
 
-export default function AdminAnalyticsDashboard({ places = [], onRefreshData }) {
+export default function AdminAnalyticsDashboard({ places = [], userCount, onRefreshData }) {
   const [selectedRegionFilter, setSelectedRegionFilter] = useState('all');
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [backendStats, setBackendStats] = useState(null);
@@ -93,6 +93,21 @@ export default function AdminAnalyticsDashboard({ places = [], onRefreshData }) 
 
   const highestVisit = analytics.topVisited[0]?.visitCount || 1;
 
+  // Làm sạch trích dẫn nhận xét (bỏ lặp lại tên địa điểm ở đầu)
+  const cleanReviewSnippet = (content, placeName) => {
+    if (!content) return '';
+    let text = content.trim();
+    if (placeName) {
+      const prefixWithColon = `${placeName}:`;
+      if (text.startsWith(prefixWithColon)) {
+        text = text.substring(prefixWithColon.length).trim();
+      } else if (text.startsWith(placeName)) {
+        text = text.substring(placeName.length).trim();
+      }
+    }
+    return text;
+  };
+
   return (
     <div style={{ maxWidth: 1200, margin: '0 auto', padding: '32px 24px', display: 'flex', flexDirection: 'column', gap: 28 }}>
       {/* 1. Header Báo Cáo Phân Tích */}
@@ -116,7 +131,7 @@ export default function AdminAnalyticsDashboard({ places = [], onRefreshData }) 
             Bảng Chỉ Số Vận Hành & Đo Lường Hành Vi Người Dùng LonGo
           </h1>
           <p className="aj-body-sm" style={{ color: 'var(--aj-slate, #64748b)' }}>
-            Dữ liệu tổng hợp từ <strong>{places.length} địa điểm thực tế</strong> trên MongoDB Atlas & tương tác thời gian thực của du khách.
+            Dữ liệu tổng hợp từ <strong>{places.length} địa điểm</strong> trên toàn quốc.
           </p>
         </div>
 
@@ -126,7 +141,7 @@ export default function AdminAnalyticsDashboard({ places = [], onRefreshData }) 
             disabled={isRefreshing}
             className="aj-button-pill-outline"
             style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13 }}
-            title="Đồng bộ dữ liệu mới nhất từ MongoDB Atlas"
+            title="Đồng bộ dữ liệu mới nhất"
           >
             <RefreshCw size={14} className={isRefreshing ? 'animate-spin' : ''} />
             <span>{isRefreshing ? 'Đang cập nhật...' : 'Làm mới số liệu'}</span>
@@ -141,37 +156,91 @@ export default function AdminAnalyticsDashboard({ places = [], onRefreshData }) 
         </span>
         <button
           onClick={() => setSelectedRegionFilter('all')}
-          className={selectedRegionFilter === 'all' ? 'aj-pill-active' : 'aj-pill-inactive'}
+          style={{
+            padding: '6px 14px',
+            borderRadius: 6,
+            border: selectedRegionFilter === 'all' ? '1px solid #090d16' : '1px solid #e2e8f0',
+            background: selectedRegionFilter === 'all' ? '#090d16' : '#ffffff',
+            color: selectedRegionFilter === 'all' ? '#ffffff' : '#090d16',
+            fontSize: 12.5,
+            fontWeight: 700,
+            cursor: 'pointer'
+          }}
         >
           Toàn bộ địa bàn ({places.length})
         </button>
         <button
           onClick={() => setSelectedRegionFilter('hcm')}
-          className={selectedRegionFilter === 'hcm' ? 'aj-pill-active' : 'aj-pill-inactive'}
+          style={{
+            padding: '6px 14px',
+            borderRadius: 6,
+            border: selectedRegionFilter === 'hcm' ? '1px solid #090d16' : '1px solid #e2e8f0',
+            background: selectedRegionFilter === 'hcm' ? '#090d16' : '#ffffff',
+            color: selectedRegionFilter === 'hcm' ? '#ffffff' : '#090d16',
+            fontSize: 12.5,
+            fontWeight: 700,
+            cursor: 'pointer'
+          }}
         >
           TP. Hồ Chí Minh
         </button>
         <button
           onClick={() => setSelectedRegionFilter('vungtau')}
-          className={selectedRegionFilter === 'vungtau' ? 'aj-pill-active' : 'aj-pill-inactive'}
+          style={{
+            padding: '6px 14px',
+            borderRadius: 6,
+            border: selectedRegionFilter === 'vungtau' ? '1px solid #090d16' : '1px solid #e2e8f0',
+            background: selectedRegionFilter === 'vungtau' ? '#090d16' : '#ffffff',
+            color: selectedRegionFilter === 'vungtau' ? '#ffffff' : '#090d16',
+            fontSize: 12.5,
+            fontWeight: 700,
+            cursor: 'pointer'
+          }}
         >
           Bà Rịa - Vũng Tàu
         </button>
         <button
           onClick={() => setSelectedRegionFilter('tayninh')}
-          className={selectedRegionFilter === 'tayninh' ? 'aj-pill-active' : 'aj-pill-inactive'}
+          style={{
+            padding: '6px 14px',
+            borderRadius: 6,
+            border: selectedRegionFilter === 'tayninh' ? '1px solid #090d16' : '1px solid #e2e8f0',
+            background: selectedRegionFilter === 'tayninh' ? '#090d16' : '#ffffff',
+            color: selectedRegionFilter === 'tayninh' ? '#ffffff' : '#090d16',
+            fontSize: 12.5,
+            fontWeight: 700,
+            cursor: 'pointer'
+          }}
         >
           Tây Ninh
         </button>
         <button
           onClick={() => setSelectedRegionFilter('dongnai_binhduong')}
-          className={selectedRegionFilter === 'dongnai_binhduong' ? 'aj-pill-active' : 'aj-pill-inactive'}
+          style={{
+            padding: '6px 14px',
+            borderRadius: 6,
+            border: selectedRegionFilter === 'dongnai_binhduong' ? '1px solid #090d16' : '1px solid #e2e8f0',
+            background: selectedRegionFilter === 'dongnai_binhduong' ? '#090d16' : '#ffffff',
+            color: selectedRegionFilter === 'dongnai_binhduong' ? '#ffffff' : '#090d16',
+            fontSize: 12.5,
+            fontWeight: 700,
+            cursor: 'pointer'
+          }}
         >
           Bình Dương & Đồng Nai
         </button>
         <button
           onClick={() => setSelectedRegionFilter('mientay')}
-          className={selectedRegionFilter === 'mientay' ? 'aj-pill-active' : 'aj-pill-inactive'}
+          style={{
+            padding: '6px 14px',
+            borderRadius: 6,
+            border: selectedRegionFilter === 'mientay' ? '1px solid #090d16' : '1px solid #e2e8f0',
+            background: selectedRegionFilter === 'mientay' ? '#090d16' : '#ffffff',
+            color: selectedRegionFilter === 'mientay' ? '#ffffff' : '#090d16',
+            fontSize: 12.5,
+            fontWeight: 700,
+            cursor: 'pointer'
+          }}
         >
           Tiền Giang (Mỹ Tho)
         </button>
@@ -187,42 +256,32 @@ export default function AdminAnalyticsDashboard({ places = [], onRefreshData }) 
         <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 8, padding: '20px 22px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span style={{ fontSize: 11, fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em' }}>TỔNG ĐỊA ĐIỂM</span>
-            <Compass size={18} color="#000000" />
+            <Compass size={18} color="#090d16" />
           </div>
-          <div style={{ fontSize: 32, fontWeight: 900, marginTop: 8, color: '#000000' }}>
+          <div style={{ fontSize: 32, fontWeight: 900, marginTop: 8, color: '#090d16' }}>
             {analytics.totalPlaces}
-          </div>
-          <div style={{ fontSize: 12, color: '#10b981', fontWeight: 600, marginTop: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
-            <span>✓ 100% Tọa độ thật trên bản đồ</span>
           </div>
         </div>
 
-        {/* KPI 2: SỐ LƯỢNG NGƯỜI DÙNG ĐÃ ĐĂNG KÝ (Thay cho Đánh giá đã lưu) */}
+        {/* KPI 2: SỐ LƯỢNG NGƯỜI DÙNG */}
         <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 8, padding: '20px 22px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span style={{ fontSize: 11, fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em' }}>SỐ LƯỢNG NGƯỜI DÙNG</span>
-            <Users size={18} color="#000000" />
+            <Users size={18} color="#090d16" />
           </div>
-          <div style={{ fontSize: 32, fontWeight: 900, marginTop: 8, color: '#000000' }}>
-            {backendStats?.totalUsers || 24}
-          </div>
-          <div style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>
-            Thành viên đăng ký xác thực
+          <div style={{ fontSize: 32, fontWeight: 900, marginTop: 8, color: '#090d16' }}>
+            {userCount || backendStats?.totalUsers || 24}
           </div>
         </div>
 
-        {/* KPI 3: TỔNG LƯỢT TRUY CẬP (Thay cho Điểm trung bình hệ thống) */}
+        {/* KPI 3: TỔNG LƯỢT TRUY CẬP */}
         <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 8, padding: '20px 22px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: 11, fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em' }}>TỔNG LƯỢT TRUY CẬP (VISITS)</span>
-            <Eye size={18} color="#0284c7" />
+            <span style={{ fontSize: 11, fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em' }}>TỔNG LƯỢT TRUY CẬP</span>
+            <Eye size={18} color="#090d16" />
           </div>
-          <div style={{ fontSize: 32, fontWeight: 900, marginTop: 8, color: '#0284c7' }}>
+          <div style={{ fontSize: 32, fontWeight: 900, marginTop: 8, color: '#090d16' }}>
             {(backendStats?.totalVisits ? Number(backendStats.totalVisits) : analytics.totalVisits).toLocaleString('vi-VN')}
-          </div>
-          <div style={{ fontSize: 12, color: '#0284c7', fontWeight: 600, marginTop: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
-            <Activity size={12} />
-            <span>Tăng theo mỗi cú click thực tế</span>
           </div>
         </div>
 
@@ -230,13 +289,10 @@ export default function AdminAnalyticsDashboard({ places = [], onRefreshData }) 
         <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 8, padding: '20px 22px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span style={{ fontSize: 11, fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em' }}>BÀI VIẾT CỘNG ĐỒNG</span>
-            <MessageSquare size={18} color="#059669" />
+            <MessageSquare size={18} color="#090d16" />
           </div>
-          <div style={{ fontSize: 32, fontWeight: 900, marginTop: 8, color: '#059669' }}>
+          <div style={{ fontSize: 32, fontWeight: 900, marginTop: 8, color: '#090d16' }}>
             {backendStats?.totalPosts || 18}
-          </div>
-          <div style={{ fontSize: 12, color: '#059669', fontWeight: 600, marginTop: 4 }}>
-            Hình ảnh & trải nghiệm từ Feed du lịch
           </div>
         </div>
       </div>
@@ -244,29 +300,20 @@ export default function AdminAnalyticsDashboard({ places = [], onRefreshData }) 
       {/* 4. HAI KHỐI PHÂN TÍCH TRỌNG TÂM: TOP TRUY CẬP NHIỀU NHẤT & TOP ĐÁNH GIÁ THẤP NHẤT */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(520px, 1fr))', gap: 20 }}>
         
-        {/* KHỐI 1: TOP 5 ĐỊA ĐIỂM CÓ LƯỢNG TRUY CẬP CAO NHẤT (Phục vụ đề xuất Trang chủ) */}
+        {/* KHỐI 1: TOP 5 ĐỊA ĐIỂM CÓ LƯỢNG TRUY CẬP CAO NHẤT */}
         <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 8, padding: '24px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 18 }}>
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <TrendingUp size={18} color="#0284c7" />
-                <h3 style={{ fontSize: 16, fontWeight: 800, color: '#000000', margin: 0 }}>
-                  Top 5 Địa Điểm Có Lượng Truy Cập Cao Nhất
-                </h3>
-              </div>
-              <p style={{ fontSize: 12, color: '#64748b', margin: '4px 0 0 0' }}>
-                Đo lường theo mỗi cú click thực tế của du khách (Làm căn cứ đề xuất mục Nổi bật trên Trang chủ)
-              </p>
-            </div>
-            <span style={{ fontSize: 11, background: '#f0f9ff', color: '#0284c7', padding: '3px 8px', borderRadius: 4, fontWeight: 800 }}>
-              Dynamic Click Tracker
-            </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 18 }}>
+            <TrendingUp size={18} color="#090d16" />
+            <h3 style={{ fontSize: 16, fontWeight: 800, color: '#090d16', margin: 0 }}>
+              Top 5 Địa Điểm Có Lượng Truy Cập Cao Nhất
+            </h3>
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
             {analytics.topVisited.map((p, idx) => {
               const visit = p.visitCount || 0;
               const pct = highestVisit > 0 ? Math.min(100, Math.round((visit / highestVisit) * 100)) : 0;
+              const rankColor = idx === 0 ? '#ca8a04' : (idx === 1 ? '#94a3b8' : (idx === 2 ? '#b45309' : '#090d16'));
 
               return (
                 <div key={p.id || p._id || idx} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -274,97 +321,88 @@ export default function AdminAnalyticsDashboard({ places = [], onRefreshData }) 
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       <span style={{ 
                         width: 22, height: 22, borderRadius: '50%', 
-                        background: idx === 0 ? '#ca8a04' : (idx === 1 ? '#94a3b8' : (idx === 2 ? '#b45309' : '#0f172a')), 
+                        background: rankColor, 
                         color: '#ffffff', display: 'flex', alignItems: 'center', justifyContent: 'center', 
                         fontSize: 11, fontWeight: 900 
                       }}>
                         {idx + 1}
                       </span>
-                      <strong style={{ color: '#0f172a' }}>{p.name}</strong>
+                      <strong style={{ color: '#090d16' }}>{p.name}</strong>
                       <span style={{ fontSize: 11, color: '#64748b' }}>({p.categoryName || 'Di tích'})</span>
                     </div>
 
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontWeight: 800, color: '#0284c7' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontWeight: 800, color: '#090d16' }}>
                       <Eye size={13} />
                       <span>{visit.toLocaleString('vi-VN')} clicks</span>
                     </div>
                   </div>
 
-                  <div style={{ width: '100%', height: 7, background: '#f1f5f9', borderRadius: 9999, overflow: 'hidden' }}>
-                    <div style={{ width: `${Math.max(pct, 5)}%`, height: '100%', background: '#0284c7', borderRadius: 9999, transition: 'width 0.4s ease' }} />
+                  <div style={{ width: '100%', height: 6, background: '#f1f5f9', borderRadius: 9999, overflow: 'hidden' }}>
+                    <div style={{ width: `${Math.max(pct, 5)}%`, height: '100%', background: '#090d16', borderRadius: 9999, transition: 'width 0.4s ease' }} />
                   </div>
                 </div>
               );
             })}
           </div>
-
-          <div style={{ marginTop: 18, paddingTop: 12, borderTop: '1px dashed #e2e8f0', fontSize: 12, color: '#64748b', display: 'flex', justifyContent: 'space-between' }}>
-            <span>💡 <strong>Ứng dụng:</strong> Thuật toán tự động đưa 5 địa điểm này lên mục "Gợi ý hàng đầu" ngoài trang chủ.</span>
-          </div>
         </div>
 
-        {/* KHỐI 2: TOP 5 ĐỊA ĐIỂM BỊ ĐÁNH GIÁ THẤP NHẤT (Phục vụ cải thiện chất lượng du lịch) */}
+        {/* KHỐI 2: TOP 5 ĐỊA ĐIỂM BỊ ĐÁNH GIÁ THẤP NHẤT */}
         <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 8, padding: '24px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 18 }}>
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <AlertTriangle size={18} color="#e11d48" />
-                <h3 style={{ fontSize: 16, fontWeight: 800, color: '#000000', margin: 0 }}>
-                  Top 5 Địa Điểm Bị Du Khách Đánh Giá Thấp Nhất
-                </h3>
-              </div>
-              <p style={{ fontSize: 12, color: '#64748b', margin: '4px 0 0 0' }}>
-                Phản ánh thực tế từ du khách giúp cơ quan và ban quản lý tập trung cải thiện dịch vụ
-              </p>
-            </div>
-            <span style={{ fontSize: 11, background: '#fff1f2', color: '#e11d48', padding: '3px 8px', borderRadius: 4, fontWeight: 800 }}>
-              Service Quality Watch
-            </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 18 }}>
+            <AlertTriangle size={18} color="#090d16" />
+            <h3 style={{ fontSize: 16, fontWeight: 800, color: '#090d16', margin: 0 }}>
+              Top 5 Địa Điểm Bị Đánh Giá Thấp Nhất
+            </h3>
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             {analytics.lowestRated.map((p, idx) => {
-              const rating = p.ratingAverage ? Number(p.ratingAverage).toFixed(1) : 'Chưa có';
+              const rating = p.ratingAverage ? Number(p.ratingAverage).toFixed(1) : (p.rating ? Number(p.rating).toFixed(1) : 'Chưa có');
               const pReviews = p.reviews || [];
               const lowestReview = pReviews.find(r => r.rating <= 3) || pReviews[0];
+              const cleanedSnippet = cleanReviewSnippet(lowestReview?.content, p.name);
+              const rankColor = idx === 0 ? '#ca8a04' : (idx === 1 ? '#94a3b8' : (idx === 2 ? '#b45309' : '#090d16'));
 
               return (
                 <div key={p.id || p._id || idx} style={{ 
-                  padding: '10px 12px', 
+                  padding: '12px 14px', 
                   borderRadius: 6, 
-                  background: '#fef2f2', 
-                  border: '1px solid #fecaca',
+                  background: '#ffffff', 
+                  border: '1px solid #e2e8f0',
                   display: 'flex',
                   flexDirection: 'column',
                   gap: 4
                 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <span style={{ fontSize: 12, fontWeight: 900, color: '#b91c1c' }}>#{idx + 1}</span>
-                      <strong style={{ fontSize: 13, color: '#991b1b' }}>{p.name}</strong>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ 
+                        width: 22, height: 22, borderRadius: '50%', 
+                        background: rankColor, 
+                        color: '#ffffff', display: 'flex', alignItems: 'center', justifyContent: 'center', 
+                        fontSize: 11, fontWeight: 900 
+                      }}>
+                        {idx + 1}
+                      </span>
+                      <strong style={{ fontSize: 13, color: '#090d16' }}>{p.name}</strong>
                     </div>
 
                     <span style={{ 
-                      background: '#b91c1c', color: '#ffffff', 
+                      background: '#090d16', color: '#ffffff', 
                       padding: '2px 8px', borderRadius: 4, 
-                      fontSize: 11, fontWeight: 900 
+                      fontSize: 11, fontWeight: 800 
                     }}>
-                      ★ {rating} ({pReviews.length} reviews)
+                      ★ {rating} ({pReviews.length} đánh giá)
                     </span>
                   </div>
 
-                  {lowestReview && (
-                    <div style={{ fontSize: '11.5px', color: '#7f1d1d', fontStyle: 'italic', marginTop: 2 }}>
-                      💬 "{lowestReview.content.length > 90 ? lowestReview.content.slice(0, 90) + '...' : lowestReview.content}"
+                  {cleanedSnippet && (
+                    <div style={{ fontSize: '12px', color: '#64748b', fontStyle: 'italic', marginTop: 3 }}>
+                      💬 "{cleanedSnippet.length > 95 ? cleanedSnippet.slice(0, 95) + '...' : cleanedSnippet}"
                     </div>
                   )}
                 </div>
               );
             })}
-          </div>
-
-          <div style={{ marginTop: 18, paddingTop: 12, borderTop: '1px dashed #e2e8f0', fontSize: 12, color: '#64748b' }}>
-            <span>⚠️ <strong>Khuyến nghị vận hành:</strong> Cần rà soát các vấn đề về vệ sinh, bãi giữ xe, thời gian chờ đợi tại các điểm trên.</span>
           </div>
         </div>
 
@@ -373,10 +411,10 @@ export default function AdminAnalyticsDashboard({ places = [], onRefreshData }) 
       {/* 5. Cơ Cấu Địa Điểm Theo Danh Mục */}
       <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 8, padding: '24px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
-          <h3 style={{ fontSize: 16, fontWeight: 800, color: '#000000', margin: 0 }}>
+          <h3 style={{ fontSize: 16, fontWeight: 800, color: '#090d16', margin: 0 }}>
             Cơ Cấu Địa Điểm Theo Danh Mục Du Lịch / Ăn Uống
           </h3>
-          <PieChart size={20} color="#000000" />
+          <PieChart size={20} color="#090d16" />
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 14 }}>
@@ -386,10 +424,10 @@ export default function AdminAnalyticsDashboard({ places = [], onRefreshData }) 
               <div key={cat} style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: '10px 14px', background: '#f8fafc', borderRadius: 6, border: '1px solid #f1f5f9' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, fontWeight: 600 }}>
                   <span>{cat}</span>
-                  <span style={{ fontWeight: 800, color: '#0f172a' }}>{count} địa điểm ({pct}%)</span>
+                  <span style={{ fontWeight: 800, color: '#090d16' }}>{count} địa điểm ({pct}%)</span>
                 </div>
                 <div style={{ width: '100%', background: '#e2e8f0', height: 6, borderRadius: 9999, overflow: 'hidden' }}>
-                  <div style={{ width: `${pct}%`, height: '100%', background: '#0f172a', borderRadius: 9999 }} />
+                  <div style={{ width: `${pct}%`, height: '100%', background: '#090d16', borderRadius: 9999 }} />
                 </div>
               </div>
             );

@@ -88,4 +88,6 @@ public class CreateReplyRequest
     [Required]
     [MinLength(2, ErrorMessage = "Nội dung trả lời quá ngắn")]
     public string Content { get; set; } = string.Empty;
+
+    public CommentImage? Image { get; set; }
 }

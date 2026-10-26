@@ -211,25 +211,6 @@ export default function SeasonalTravelCalendar({ onSelectMonthForExplore }) {
             </button>
           </div>
         </div>
-
-        {/* Chú giải trạng thái chuẩn 3 cấp độ */}
-        <div style={{ display: 'flex', gap: 24, marginTop: 20, alignItems: 'center', flexWrap: 'wrap' }}>
-          <span style={{ fontSize: '12px', fontWeight: 800, color: 'var(--aj-slate)', textTransform: 'uppercase' }}>
-            Quy ước khuyến nghị:
-          </span>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: '13.5px', fontWeight: 700, color: '#166534' }}>
-            <span style={{ width: 14, height: 14, borderRadius: '4px', backgroundColor: '#22c55e', display: 'inline-block' }} />
-            <span>Nên đi (Thời tiết đẹp nhất, biển êm, mùa hoa/lễ hội nở rộ)</span>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: '13.5px', fontWeight: 700, color: '#854d0e' }}>
-            <span style={{ width: 14, height: 14, borderRadius: '4px', backgroundColor: '#eab308', display: 'inline-block' }} />
-            <span>Cân nhắc (Se lạnh, sương mù ẩm hoặc mưa rải rác)</span>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: '13.5px', fontWeight: 700, color: '#991b1b' }}>
-            <span style={{ width: 14, height: 14, borderRadius: '4px', backgroundColor: '#ef4444', display: 'inline-block' }} />
-            <span>Nên tránh (Cao điểm bão lũ, mưa dầm, đường đèo trơn trượt hoặc cấm biển)</span>
-          </div>
-        </div>
       </div>
 
       {/* ─────────────────────────────────────────────────────────────
@@ -274,11 +255,6 @@ export default function SeasonalTravelCalendar({ onSelectMonthForExplore }) {
               {item.month === 1 && (
                 <span style={{ fontSize: '9px', fontWeight: 800, color: isActive ? '#38bdf8' : '#0284c7' }}>
                   Đầu Xuân
-                </span>
-              )}
-              {item.month === 11 && (
-                <span style={{ fontSize: '9px', fontWeight: 800, color: isActive ? '#38bdf8' : '#0284c7' }}>
-                  Hiện tại
                 </span>
               )}
             </button>

@@ -1,274 +1,430 @@
-import React, { useState } from 'react';
-import { Calendar, Clock, MapPin, Trash2, ArrowUp, ArrowDown, Sparkles, CheckCircle2, ChevronRight } from 'lucide-react';
+import React from 'react';
+import { 
+  Calendar, Clock, MapPin, Trash2, ArrowUp, ArrowDown, 
+  Sparkles, CheckCircle2, ChevronRight, Navigation, ExternalLink,
+  Compass, PlusCircle, Share2
+} from 'lucide-react';
 
-export default function TripPlanner({ customStops, onRemoveStop, onSelectPlace, onClearTrip, onAddStopsFromPreset }) {
-  const [selectedPresetId, setSelectedPresetId] = useState('preset-1');
+export default function TripPlanner({ 
+  customStops = [], 
+  onRemoveStop, 
+  onSelectPlace, 
+  onClearTrip, 
+  onMoveStop,
+  onNavigateExplore 
+}) {
 
-  // Các lịch trình mẫu chuẩn bị sẵn cho du khách đến TP.HCM
-  const presetItineraries = [
-    {
-      id: 'preset-1',
-      title: '1 Ngày Dấu Ấn Lịch Sử & Cà Phê Specialty',
-      description: 'Lộ trình tối ưu cho du khách lần đầu đến TP.HCM, kết hợp các di tích biểu tượng và trải nghiệm cà phê văn hóa.',
-      stops: [
-        {
-          time: '08:30 - 10:30',
-          title: 'Dinh Độc Lập (Hội trường Thống Nhất)',
-          district: 'Quận 1',
-          desc: 'Khởi đầu ngày mới tìm hiểu lịch sử hào hùng và kiến trúc thời kỳ 1960 độc đáo.',
-          category: 'Du lịch & Di tích'
-        },
-        {
-          time: '11:00 - 12:30',
-          title: 'Phở Hòa Pasteur',
-          district: 'Quận 3',
-          desc: 'Thưởng thức tô phở Nam truyền thống đậm đà với quẩy nóng giòn.',
-          category: 'Ẩm thực & Nhà hàng'
-        },
-        {
-          time: '13:00 - 14:30',
-          title: 'Bưu Điện Trung Tâm & Nhà Thờ Đức Bà',
-          district: 'Quận 1',
-          desc: 'Check-in kiến trúc Phục Hưng Pháp và gửi một tấm bưu thiếp lưu niệm.',
-          category: 'Du lịch & Di tích'
-        },
-        {
-          time: '15:00 - 16:30',
-          title: 'The Workshop Coffee',
-          district: 'Quận 1',
-          desc: 'Thư giãn thưởng thức cà phê Pour-over thủ công tại chung cư cổ Ngô Đức Kế.',
-          category: 'Cà phê & Trà'
-        },
-        {
-          time: '17:30 - 20:30',
-          title: 'Phố Đi Bộ Nguyễn Huệ & Chợ Bến Thành',
-          district: 'Quận 1',
-          desc: 'Dạo phố đêm sôi động, ngắm nhìn ánh sáng thành phố và thưởng thức quà vặt.',
-          category: 'Vui chơi & Giải trí'
-        }
-      ]
-    },
-    {
-      id: 'preset-2',
-      title: 'Food Tour & Khám Phá Ẩm Thực Michelin',
-      description: 'Lộ trình dành riêng cho tín đồ ẩm thực muốn thử trọn vẹn những món ăn nức tiếng Sài Gòn trong một ngày.',
-      stops: [
-        {
-          time: '08:00 - 09:00',
-          title: 'Bánh Mì Huỳnh Hoa',
-          district: 'Quận 1',
-          desc: 'Bữa sáng no nê với ổ bánh mì pate ngập tràn chả lụa và thịt nguội.',
-          category: 'Ẩm thực & Nhà hàng'
-        },
-        {
-          time: '11:30 - 13:00',
-          title: 'Cơm Tấm Ba Ghiền (Michelin Guide)',
-          district: 'Phú Nhuận',
-          desc: 'Đĩa cơm sườn nướng mỡ hành khổng lồ trứ danh chuẩn vị miền Nam.',
-          category: 'Ẩm thực & Nhà hàng'
-        },
-        {
-          time: '14:30 - 16:00',
-          title: 'Okkio Caffe — Lê Lợi',
-          district: 'Quận 1',
-          desc: 'Nghỉ chân với ly Cold Brew mát lạnh trong không gian tone đỏ đất ấm áp.',
-          category: 'Cà phê & Trà'
-        },
-        {
-          time: '18:00 - 20:00',
-          title: 'Pizza 4P\'s Bến Thành',
-          district: 'Quận 1',
-          desc: 'Bữa tối phô mai Burrata tươi và pizza nướng củi phong cách Nhật.',
-          category: 'Ẩm thực & Nhà hàng'
-        },
-        {
-          time: '20:30 - khuya',
-          title: 'Phố Tây Bùi Viện',
-          district: 'Quận 1',
-          desc: 'Hòa mình vào không khí đêm sôi động, thưởng thức bia và âm nhạc đường phố.',
-          category: 'Vui chơi & Giải trí'
-        }
-      ]
-    },
-    {
-      id: 'preset-3',
-      title: 'Check-in Sài Gòn Hiện Đại & Skyline',
-      description: 'Ngắm nhìn sự chuyển mình ngoạn mục của TP.HCM từ tòa tháp cao nhất Việt Nam đến bán đảo ven sông.',
-      stops: [
-        {
-          time: '09:00 - 11:30',
-          title: 'Thảo Cầm Viên Sài Gòn',
-          district: 'Quận 1',
-          desc: 'Dạo bộ dưới bóng cây cổ thụ hơn trăm năm tuổi và không gian xanh thanh bình.',
-          category: 'Vui chơi & Giải trí'
-        },
-        {
-          time: '14:00 - 17:00',
-          title: 'Landmark 81 SkyView',
-          district: 'Bình Thạnh',
-          desc: 'Lên tầng 81 ngắm trọn vẹn toàn cảnh sông Sài Gòn và thành phố từ trên cao.',
-          category: 'Vui chơi & Giải trí'
-        },
-        {
-          time: '18:00 - 21:00',
-          title: 'The Reverie Saigon / Bến Bạch Đằng',
-          district: 'Quận 1',
-          desc: 'Bữa tối sang trọng bên bờ sông và ngắm tàu thuyền du lịch lộng lẫy về đêm.',
-          category: 'Khách sạn & Nghỉ dưỡng'
-        }
-      ]
+  // Tạo liên kết chỉ đường nhiều chặng trên Google Maps
+  const googleMapsRouteUrl = React.useMemo(() => {
+    if (!customStops || customStops.length === 0) return '';
+    const points = customStops.map(s => {
+      const addr = typeof s.address === 'string' ? s.address : (s.address?.street ? `${s.name}, ${s.address.street}, ${s.address.city || ''}` : s.name);
+      return encodeURIComponent(addr.trim());
+    });
+    return `https://www.google.com/maps/dir/${points.join('/')}`;
+  }, [customStops]);
+
+  // Các quận/huyện nằm trong lộ trình
+  const coveredDistricts = React.useMemo(() => {
+    const districts = new Set();
+    customStops.forEach(s => {
+      if (s.address?.district) districts.add(s.address.district);
+    });
+    return Array.from(districts);
+  }, [customStops]);
+
+  const handleMoveUp = (index) => {
+    if (index > 0 && onMoveStop) {
+      onMoveStop(index, index - 1);
     }
-  ];
+  };
 
-  const currentPreset = presetItineraries.find(p => p.id === selectedPresetId);
+  const handleMoveDown = (index) => {
+    if (index < customStops.length - 1 && onMoveStop) {
+      onMoveStop(index, index + 1);
+    }
+  };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-      <div>
-        <h2 style={{ fontSize: '1.5rem', marginBottom: 4 }}>Lập Kế Hoạch Du Lịch TP.HCM</h2>
-        <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
-          Tối ưu hóa thời gian và lộ trình di chuyển giữa các điểm tham quan, ẩm thực và cà phê tại thành phố
-        </p>
-      </div>
-
-      {/* 1. Lịch trình tự tạo của bạn (Custom stops) */}
-      <div style={{ background: '#ffffff', padding: 20, borderRadius: 'var(--radius-md)', border: '1px solid var(--border-light)' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-          <div>
-            <h3 style={{ fontSize: '1.1rem' }}>Lịch trình cá nhân của bạn</h3>
-            <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-              ({customStops.length} địa điểm đã chọn từ bản đồ hoặc danh sách)
-            </span>
+      {/* Header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12 }}>
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+            <span style={{ width: 4, height: 18, backgroundColor: '#fa9000', borderRadius: 2 }} />
+            <h2 style={{ fontSize: '1.6rem', fontWeight: 800, color: '#0f172a', margin: 0 }}>
+              Kế Hoạch Hành Trình Du Lịch Cá Nhân
+            </h2>
           </div>
-
-          {customStops.length > 0 && (
-            <button onClick={onClearTrip} className="btn-clean-ghost" style={{ color: '#ef4444', fontSize: '0.85rem' }}>
-              <Trash2 size={14} /> Xóa lịch trình
-            </button>
-          )}
+          <p style={{ color: '#64748b', fontSize: '0.95rem', margin: 0 }}>
+            Tự do sắp xếp thứ tự các điểm dừng, tối ưu lộ trình di chuyển và xuất bản đồ chỉ đường Google Maps
+          </p>
         </div>
 
-        {customStops.length > 0 ? (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            {customStops.map((stop, index) => (
-              <div 
-                key={stop.id || stop._id || index}
-                style={{
-                  display: 'flex',
+        {customStops.length > 0 && (
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+            <a
+              href={googleMapsRouteUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                backgroundColor: '#2563eb',
+                color: '#ffffff',
+                padding: '10px 18px',
+                borderRadius: 8,
+                fontSize: '13.5px',
+                fontWeight: 700,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 8,
+                textDecoration: 'none',
+                boxShadow: '0 2px 8px rgba(37, 99, 235, 0.3)'
+              }}
+            >
+              <Navigation size={16} />
+              <span>Chỉ Đường Lộ Trình (Google Maps)</span>
+            </a>
+
+            <button 
+              onClick={() => {
+                if (window.confirm('Bạn có chắc chắn muốn xóa toàn bộ các điểm dừng trong lịch trình này?')) {
+                  onClearTrip();
+                }
+              }} 
+              style={{
+                backgroundColor: '#ffffff',
+                color: '#ef4444',
+                border: '1px solid #fecaca',
+                padding: '10px 16px',
+                borderRadius: 8,
+                fontSize: '13.5px',
+                fontWeight: 600,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                cursor: 'pointer'
+              }}
+            >
+              <Trash2 size={15} />
+              <span>Xóa tất cả</span>
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Main Itinerary Container */}
+      <div style={{ 
+        background: '#ffffff', 
+        padding: '24px 28px', 
+        borderRadius: 16, 
+        border: '1px solid #e2e8f0',
+        boxShadow: '0 2px 10px rgba(0,0,0,0.03)'
+      }}>
+        
+        {/* Statistics Bar when stops exist */}
+        {customStops.length > 0 && (
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            paddingBottom: 18,
+            marginBottom: 20,
+            borderBottom: '1px solid #f1f5f9',
+            flexWrap: 'wrap',
+            gap: 12
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '14px', fontWeight: 700, color: '#0f172a' }}>
+                <span style={{
+                  backgroundColor: '#0f172a',
+                  color: '#ffffff',
+                  width: 24,
+                  height: 24,
+                  borderRadius: '50%',
+                  display: 'inline-flex',
                   alignItems: 'center',
-                  justifyContent: 'space-between',
-                  padding: '12px 16px',
-                  background: 'var(--bg-subtle)',
-                  borderRadius: 'var(--radius-sm)'
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-                  <div style={{
-                    width: 28,
-                    height: 28,
-                    borderRadius: '50%',
-                    background: '#0f172a',
-                    color: '#fff',
+                  justifyContent: 'center',
+                  fontSize: '12px'
+                }}>
+                  {customStops.length}
+                </span>
+                <span>Điểm dừng trong hành trình</span>
+              </div>
+
+              {coveredDistricts.length > 0 && (
+                <div style={{ fontSize: '13px', color: '#64748b' }}>
+                  Khu vực: <strong style={{ color: '#334155' }}>{coveredDistricts.join(', ')}</strong>
+                </div>
+              )}
+
+              <div style={{ fontSize: '13px', color: '#059669', fontWeight: 600 }}>
+                ⏱️ Ước tính: {customStops.length * 1.5} - {customStops.length * 2.5} tiếng trải nghiệm
+              </div>
+            </div>
+
+            <div style={{ fontSize: '12.5px', color: '#64748b' }}>
+              Dùng mũi tên ▲ ▼ để đổi thứ tự các điểm dừng
+            </div>
+          </div>
+        )}
+
+        {/* Stops List */}
+        {customStops.length > 0 ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14, position: 'relative' }}>
+            {customStops.map((stop, index) => {
+              const stopImg = stop.images?.[0]?.url || (typeof stop.images?.[0] === 'string' ? stop.images[0] : null);
+              const stopAddress = typeof stop.address === 'string' ? stop.address : (stop.address?.street || stop.address?.district || '');
+
+              return (
+                <div 
+                  key={stop.id || stop._id || index}
+                  style={{
                     display: 'flex',
                     alignItems: 'center',
-                    justifyContent: 'center',
-                    fontWeight: 700,
-                    fontSize: '0.85rem'
-                  }}>
-                    {index + 1}
-                  </div>
-                  <div>
-                    <div style={{ fontWeight: 600, fontSize: '0.95rem' }}>{stop.name}</div>
-                    <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                      {stop.address?.district || 'TP.HCM'} • {stop.categoryName || 'Địa điểm'}
+                    justifyContent: 'space-between',
+                    padding: '14px 18px',
+                    background: '#f8fafc',
+                    borderRadius: 12,
+                    border: '1px solid #e2e8f0',
+                    transition: 'all 0.15s ease',
+                    flexWrap: 'wrap',
+                    gap: 12
+                  }}
+                >
+                  {/* Left: Number + Thumbnail + Info */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 14, flex: 1, minWidth: 260 }}>
+                    {/* Index Badge */}
+                    <div style={{
+                      width: 34,
+                      height: 34,
+                      borderRadius: '50%',
+                      background: index === 0 ? '#2563eb' : index === customStops.length - 1 ? '#059669' : '#0f172a',
+                      color: '#ffffff',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontWeight: 800,
+                      fontSize: '14px',
+                      flexShrink: 0
+                    }}>
+                      <span>{index + 1}</span>
+                    </div>
+
+                    {/* Thumbnail if available */}
+                    {stopImg && (
+                      <div style={{ width: 56, height: 56, borderRadius: 8, overflow: 'hidden', flexShrink: 0, border: '1px solid #e2e8f0' }}>
+                        <img 
+                          src={stopImg} 
+                          alt={stop.name} 
+                          style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+                        />
+                      </div>
+                    )}
+
+                    {/* Titles */}
+                    <div style={{ flex: 1 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                        <span style={{ fontWeight: 800, fontSize: '15px', color: '#0f172a' }}>
+                          {stop.name}
+                        </span>
+                        {index === 0 && (
+                          <span style={{ fontSize: '11px', background: '#eff6ff', color: '#2563eb', padding: '2px 8px', borderRadius: 4, fontWeight: 700 }}>
+                            Điểm xuất phát
+                          </span>
+                        )}
+                        {index === customStops.length - 1 && customStops.length > 1 && (
+                          <span style={{ fontSize: '11px', background: '#ecfdf5', color: '#059669', padding: '2px 8px', borderRadius: 4, fontWeight: 700 }}>
+                            Điểm kết thúc
+                          </span>
+                        )}
+                      </div>
+
+                      <div style={{ fontSize: '12.5px', color: '#64748b', marginTop: 3, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                        <span>📍 {stopAddress || stop.address?.district || 'TP.HCM'}</span>
+                        <span>•</span>
+                        <span style={{ color: '#2563eb', fontWeight: 600 }}>{stop.categoryName || 'Địa điểm'}</span>
+                        {stop.ticketPrice && (
+                          <>
+                            <span>•</span>
+                            <span>{stop.ticketPrice.split('/')[0]}</span>
+                          </>
+                        )}
+                      </div>
                     </div>
                   </div>
-                </div>
 
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <button 
-                    onClick={() => onSelectPlace(stop)} 
-                    className="btn-clean-ghost" 
-                    style={{ fontSize: '0.8rem' }}
-                  >
-                    Xem chi tiết
-                  </button>
-                  <button 
-                    onClick={() => onRemoveStop(index)} 
-                    className="btn-clean-ghost" 
-                    style={{ color: '#ef4444', padding: 6 }}
-                    title="Xóa khỏi lịch trình"
-                  >
-                    <Trash2 size={15} />
-                  </button>
+                  {/* Right: Order reordering + Actions */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    {/* Reordering Controls */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                      <button
+                        onClick={() => handleMoveUp(index)}
+                        disabled={index === 0}
+                        style={{
+                          background: index === 0 ? '#f1f5f9' : '#ffffff',
+                          border: '1px solid #cbd5e1',
+                          borderRadius: 4,
+                          padding: '3px 6px',
+                          cursor: index === 0 ? 'not-allowed' : 'pointer',
+                          color: index === 0 ? '#cbd5e1' : '#334155',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center'
+                        }}
+                        title="Di chuyển lên trước"
+                      >
+                        <ArrowUp size={13} />
+                      </button>
+                      <button
+                        onClick={() => handleMoveDown(index)}
+                        disabled={index === customStops.length - 1}
+                        style={{
+                          background: index === customStops.length - 1 ? '#f1f5f9' : '#ffffff',
+                          border: '1px solid #cbd5e1',
+                          borderRadius: 4,
+                          padding: '3px 6px',
+                          cursor: index === customStops.length - 1 ? 'not-allowed' : 'pointer',
+                          color: index === customStops.length - 1 ? '#cbd5e1' : '#334155',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center'
+                        }}
+                        title="Di chuyển xuống sau"
+                      >
+                        <ArrowDown size={13} />
+                      </button>
+                    </div>
+
+                    {/* View Details Button */}
+                    <button 
+                      onClick={() => onSelectPlace(stop)} 
+                      style={{
+                        backgroundColor: '#ffffff',
+                        border: '1px solid #cbd5e1',
+                        borderRadius: 6,
+                        padding: '6px 12px',
+                        fontSize: '12.5px',
+                        fontWeight: 600,
+                        color: '#0f172a',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      Xem chi tiết
+                    </button>
+
+                    {/* Remove Stop Button */}
+                    <button 
+                      onClick={() => onRemoveStop(index)} 
+                      style={{
+                        backgroundColor: '#fee2e2',
+                        border: '1px solid #fecaca',
+                        borderRadius: 6,
+                        padding: '6px 10px',
+                        color: '#dc2626',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center'
+                      }}
+                      title="Xóa điểm này khỏi lịch trình"
+                    >
+                      <Trash2 size={15} />
+                    </button>
+                  </div>
                 </div>
+              );
+            })}
+
+            {/* Route Summary Notification */}
+            <div style={{
+              marginTop: 10,
+              padding: '12px 18px',
+              backgroundColor: '#ecfdf5',
+              borderRadius: 10,
+              border: '1px solid #a7f3d0',
+              color: '#065f46',
+              fontSize: '13px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              gap: 10
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <CheckCircle2 size={18} color="#059669" />
+                <span>
+                  Lộ trình di chuyển liên tục: Bắt đầu từ <strong>{customStops[0]?.name}</strong> qua <strong>{customStops.length - 2 > 0 ? `${customStops.length - 2} điểm trung gian` : 'chặng kế tiếp'}</strong> đến điểm kết thúc <strong>{customStops[customStops.length - 1]?.name}</strong>.
+                </span>
               </div>
-            ))}
 
-            <div style={{ marginTop: 12, padding: '10px 14px', background: '#ecfdf5', borderRadius: 'var(--radius-sm)', color: '#065f46', fontSize: '0.85rem' }}>
-              ✓ Lộ trình gợi ý di chuyển: Bắt đầu từ <strong>{customStops[0]?.name}</strong> đến <strong>{customStops[customStops.length - 1]?.name}</strong>.
+              <a
+                href={googleMapsRouteUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  color: '#047857',
+                  fontWeight: 700,
+                  textDecoration: 'underline',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 4
+                }}
+              >
+                <span>Mở lộ trình GPS</span>
+                <ExternalLink size={13} />
+              </a>
             </div>
+
           </div>
         ) : (
-          <div style={{ textAlign: 'center', padding: '24px 0', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
-            Bạn chưa thêm địa điểm nào vào lịch trình. Hãy vào tab <strong>Bản đồ</strong> hoặc <strong>Khám phá</strong> và bấm <strong>+ Thêm vào kế hoạch</strong>, hoặc chọn nhanh các lịch trình mẫu gợi ý bên dưới!
-          </div>
-        )}
-      </div>
-
-      {/* 2. Lịch trình mẫu tuyển chọn (Curated Presets) */}
-      <div>
-        <h3 style={{ fontSize: '1.2rem', marginBottom: 12 }}>Gợi Ý Lịch Trình Tiêu Biểu Cho Du Khách</h3>
-        
-        {/* Preset Selector Tabs */}
-        <div style={{ display: 'flex', gap: 8, marginBottom: 16, overflowX: 'auto' }}>
-          {presetItineraries.map(preset => (
-            <button
-              key={preset.id}
-              onClick={() => setSelectedPresetId(preset.id)}
-              className={selectedPresetId === preset.id ? 'btn-clean-primary' : 'btn-clean-outline'}
-              style={{ fontSize: '0.85rem' }}
-            >
-              {preset.title}
-            </button>
-          ))}
-        </div>
-
-        {/* Selected Preset Details */}
-        {currentPreset && (
-          <div style={{ background: '#ffffff', padding: 20, borderRadius: 'var(--radius-md)', border: '1px solid var(--border-light)' }}>
-            <div style={{ marginBottom: 16 }}>
-              <div style={{ fontWeight: 700, fontSize: '1.1rem', marginBottom: 4 }}>{currentPreset.title}</div>
-              <div style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>{currentPreset.description}</div>
+          /* Empty State when no stops added */
+          <div style={{ textAlign: 'center', padding: '48px 20px', color: '#64748b' }}>
+            <div style={{
+              width: 60,
+              height: 60,
+              borderRadius: '50%',
+              backgroundColor: '#f1f5f9',
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              marginBottom: 16
+            }}>
+              <Compass size={28} color="#94a3b8" />
             </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 16, position: 'relative', paddingLeft: 24, borderLeft: '2px solid #e2e8f0', marginLeft: 12 }}>
-              {currentPreset.stops.map((stop, i) => (
-                <div key={i} style={{ position: 'relative' }}>
-                  {/* Timeline dot */}
-                  <div style={{
-                    position: 'absolute',
-                    left: -31,
-                    top: 2,
-                    width: 12,
-                    height: 12,
-                    borderRadius: '50%',
-                    background: '#0284c7',
-                    border: '2px solid #ffffff'
-                  }} />
+            <h3 style={{ fontSize: '17px', fontWeight: 800, color: '#0f172a', margin: '0 0 8px 0' }}>
+              Chưa có địa điểm nào trong kế hoạch lịch trình
+            </h3>
 
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.8rem', color: '#0284c7', fontWeight: 600, marginBottom: 2 }}>
-                    <Clock size={13} />
-                    <span>{stop.time}</span>
-                  </div>
+            <p style={{ fontSize: '13.5px', color: '#64748b', maxWidth: 520, margin: '0 auto 20px auto', lineHeight: 1.6 }}>
+              Bạn có thể dễ dàng thêm địa điểm bằng cách mở bất kỳ địa điểm nào trong tab <strong>Khám phá</strong> hoặc <strong>Bản đồ</strong> và bấm nút <strong>"+ Thêm vào kế hoạch"</strong>.
+            </p>
 
-                  <div style={{ fontWeight: 600, fontSize: '0.95rem' }}>{stop.title}</div>
-                  <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: 2 }}>{stop.desc}</div>
-                </div>
-              ))}
-            </div>
+            {onNavigateExplore && (
+              <button
+                onClick={onNavigateExplore}
+                style={{
+                  backgroundColor: '#0f172a',
+                  color: '#ffffff',
+                  border: 'none',
+                  padding: '10px 22px',
+                  borderRadius: 20,
+                  fontSize: '13.5px',
+                  fontWeight: 700,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  cursor: 'pointer'
+                }}
+              >
+                <Compass size={15} />
+                <span>Khám phá địa điểm ngay</span>
+              </button>
+            )}
           </div>
         )}
+
       </div>
     </div>
   );

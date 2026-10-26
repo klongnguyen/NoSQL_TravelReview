@@ -337,6 +337,23 @@ public class PlaceService : IPlaceService
         string? userAvatar,
         CreateReplyRequest request)
     {
+        CommentImage? replyImage = null;
+        if (request.Image != null && !string.IsNullOrWhiteSpace(request.Image.Url))
+        {
+            replyImage = new CommentImage
+            {
+                Url = request.Image.Url,
+                StorageKey = request.Image.StorageKey ?? $"rep_{Guid.NewGuid():N}",
+                StorageProvider = !string.IsNullOrWhiteSpace(request.Image.StorageProvider) ? request.Image.StorageProvider : "Cloudinary_Distributed_CDN",
+                UploadedBy = userId,
+                UploaderName = userName,
+                UploadedAt = DateTime.UtcNow,
+                FileSizeBytes = request.Image.FileSizeBytes,
+                Format = request.Image.Format ?? "jpg",
+                MimeType = request.Image.MimeType ?? "image/jpeg"
+            };
+        }
+
         var newReply = new Reply
         {
             ReplyId = ObjectId.GenerateNewId().ToString(),
@@ -344,6 +361,7 @@ public class PlaceService : IPlaceService
             UserName = userName,
             UserAvatar = userAvatar,
             Content = request.Content,
+            Image = replyImage,
             Likes = new List<string>(),
             CreatedAt = DateTime.UtcNow
         };

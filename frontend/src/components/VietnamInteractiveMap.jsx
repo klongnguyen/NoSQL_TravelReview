@@ -131,21 +131,6 @@ export default function VietnamInteractiveMap({ onExploreProvince, onProposePlac
   return (
     <div style={{ maxWidth: 1280, margin: '0 auto', padding: '24px 20px 80px 20px' }}>
       
-      {/* ─────────────────────────────────────────────────────────────
-          TIÊU ĐỀ CHUẨN AL JAZEERA & GIẢI THÍCH TƯƠNG TÁC
-          ───────────────────────────────────────────────────────────── */}
-      <div style={{ marginBottom: 28, borderBottom: '1px solid var(--aj-hairline)', paddingBottom: 20 }}>
-        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '4px 12px', background: '#000000', color: '#ffffff', borderRadius: '20px', fontSize: '12px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>
-          <Compass size={14} color="#38bdf8" />
-          <span>Bản Đồ Địa Lý Wikipedia Locator Map • Việt Nam 63 Tỉnh Thành</span>
-        </div>
-        <h1 style={{ fontSize: '32px', fontWeight: 900, color: 'var(--aj-ink)', margin: '0 0 8px 0', letterSpacing: '-0.03em' }}>
-          Bản Đồ Địa Lý & Vùng Du Lịch Việt Nam
-        </h1>
-        <p style={{ fontSize: '15px', color: 'var(--aj-slate)', margin: 0, maxWidth: 880, lineHeight: 1.6 }}>
-          Bản đồ địa giới hành chính tối giản theo tiêu chuẩn <strong>Wikipedia Locator Map</strong>. Khi nhấp chọn vào bất kỳ vùng miền hay tỉnh thành nào, khu vực đó sẽ được <strong>bôi đen tương phản</strong> và hiển thị ngay <strong>popup thông tin bách khoa</strong> (Wikipedia), hình ảnh tiêu biểu và danh lam thắng cảnh nổi tiếng.
-        </p>
-      </div>
 
       {/* ─────────────────────────────────────────────────────────────
           BỘ CÔNG CỤ TÌM KIẾM TỈNH & BỘ LỌC VÙNG MIỀN
